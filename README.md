@@ -20,7 +20,7 @@ within the prototype.
 
 ## Disclaimer
 This repository is primarily for in-house use by the University of Canterbury
-but anyone else if of course welcome to use the question types. If you need
+but anyone else is of course welcome to use the question types. If you need
 support you can try posting to the CodeRunner question author's forum, but
 please realise that these question types are not a supported part of
 CodeRunner itself, so no support is guaranteed.
