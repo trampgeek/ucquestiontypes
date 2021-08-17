@@ -91,6 +91,23 @@ class StyleChecker:
             errors.append("Sorry, but your code doesn't pass the style checks.")
 
         return errors
+    
+    def prettied(self, construct):
+        """Expand, if possible, the name of the given Python construct to a more
+           user friendly version, e.g. 'listcomprehension' -> 'list comprehension'
+        """
+        expanded = {
+            'listcomprehension': 'list comprehension',
+            'while': 'while loop',
+            'for': 'for loop',
+            'try': 'try ... except statement',
+            'dictcomprehension': 'dictionary comprehension',
+            'slice': 'slice'
+        }
+        if construct in expanded:
+            return expanded[construct]
+        else:
+            return f"{construct} statement"
 
     def local_errors(self):
         """Perform various local checks as specified by the current set of
@@ -140,11 +157,13 @@ class StyleChecker:
 
         missing_constructs = self.find_missing_required_constructs()
         for reqd in missing_constructs:
-            errors.append("Your program must include at least one " + reqd + " statement.")
+            expanded = self.prettied(reqd)
+            errors.append(f"Your program must include at least one {expanded}.")
 
         bad_constructs = self.find_illegal_constructs()
         for notallowed in bad_constructs:
-            errors.append("Your program must not include any " + notallowed + "s.")
+            expanded = self.prettied(notallowed)
+            errors.append(f"Your program must not include any {expanded}s.")
 
         num_constants = len([line for line in self.student_answer.split('\n') if re.match(' *[A-Z_][A-Z_0-9]* *=', line)])
         if num_constants > self.params['maxnumconstants']:
