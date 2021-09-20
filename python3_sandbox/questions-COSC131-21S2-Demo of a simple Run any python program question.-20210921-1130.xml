@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<quiz>
+<!-- question: 81279  -->
+  <question type="coderunner">
+    <name>
+      <text><![CDATA[Demo of a simple "Run any python program" question.]]></text>
+    </name>
+    <questiontext format="html">
+      <text><![CDATA[<p>Enter any Python3 program into the answer box. Click <i>Check</i>&nbsp;to run it. The code is not marked: all output will be considered correct, and you will <b>always </b>see the line "Passed all tests!" no matter what your code does.</p><p>If your program needs to read from standard input (usually the keyboard), you must attach a file <i>stdin.txt </i>containing the lines of input that you wish the program to read.</p><p><span style="font-size: 0.9375rem;">If required, your program can use matplotlib to plot a graph, which will be displayed in the output.</span></p>]]></text>
+    </questiontext>
+    <generalfeedback format="html">
+      <text></text>
+    </generalfeedback>
+    <defaultgrade>1</defaultgrade>
+    <penalty>0</penalty>
+    <hidden>0</hidden>
+    <idnumber></idnumber>
+    <coderunnertype>python3_sandbox</coderunnertype>
+    <prototypetype>0</prototypetype>
+    <allornothing>1</allornothing>
+    <penaltyregime>0</penaltyregime>
+    <precheck>0</precheck>
+    <hidecheck>0</hidecheck>
+    <showsource>0</showsource>
+    <answerboxlines>11</answerboxlines>
+    <answerboxcolumns>100</answerboxcolumns>
+    <answerpreload><![CDATA["""Demo of the generic python code runner pseudo-question"""
+import matplotlib.pyplot as plt
+from graphviz import Graph
+
+# First some simple text output.
+vertices = [(0, 0), (100, 0), (1, 50), (100, 100), (0, 100), (0,0)]
+vx, vy = zip(*vertices)  # Unpack them
+points = [(1, 1), (20, 20), (20, 80), (60, 50),
+     (97, 1), (1, 48), (1, 52), (97, 99), (1, 99)]
+px, py = zip(*points) # Unpack
+print("Vertex x values:", vx)
+print("Vertex y values:", vy)
+print("Point x values:", px)
+print("Point y values:", py)
+
+# Now a matplotlib graph.
+axes = plt.axes()
+axes.plot(vx, vy, color='blue', marker='o', linestyle='--')
+axes.plot(px, py, color='red', marker='x', linestyle='')
+axes.set_title('The example from the geometry lecture notes')
+
+# Lastly a graphviz example
+g = Graph()
+g.node('Root', '23')
+g.node('Leaf1', '13', shape='box')
+g.node('Leaf2', '99', shape='box')
+g.edge('Root', 'Leaf1')
+g.edge('Root', 'Leaf2')
+g.render('graph', format='png', view=False)]]></answerpreload>
+    <globalextra></globalextra>
+    <useace></useace>
+    <resultcolumns></resultcolumns>
+    <template></template>
+    <iscombinatortemplate></iscombinatortemplate>
+    <allowmultiplestdins></allowmultiplestdins>
+    <answer><![CDATA[import matplotlib.pyplot as plt
+import numpy as np
+
+# Simple input/output example first.
+name = input("What is your name? ")
+age = int(input(f"Hi {name}. How old are you? "))
+print(f"Next year you will be {age + 1}")
+
+# Now a matplotlib graph.
+axes = plt.axes()
+xs = np.linspace(0, 2 * 360, 200)
+axes.plot(xs, np.sin(xs * np.pi / 180))
+axes.set_title(r"$sin(\theta)$")
+axes.set_xticks(np.arange(0, 2 * 380 + 0.00001, 90))
+axes.set_xlabel(r"$\theta$ (degrees)")
+axes.grid(True)
+plt.show()]]></answer>
+    <validateonsave>0</validateonsave>
+    <testsplitterre></testsplitterre>
+    <language></language>
+    <acelang></acelang>
+    <sandbox></sandbox>
+    <grader></grader>
+    <cputimelimitsecs></cputimelimitsecs>
+    <memlimitmb></memlimitmb>
+    <sandboxparams></sandboxparams>
+    <templateparams></templateparams>
+    <hoisttemplateparams>1</hoisttemplateparams>
+    <templateparamslang>twig</templateparamslang>
+    <templateparamsevalpertry>0</templateparamsevalpertry>
+    <templateparamsevald>{}</templateparamsevald>
+    <twigall>0</twigall>
+    <uiplugin></uiplugin>
+    <uiparameters></uiparameters>
+    <attachments>0</attachments>
+    <attachmentsrequired>0</attachmentsrequired>
+    <maxfilesize>102400</maxfilesize>
+    <filenamesregex>stdin.txt|.*\.dat</filenamesregex>
+    <filenamesexplain>Optionally attach a file stdin.txt to be used as standard input and/or a data file with extension .dat for other use by the program.</filenamesexplain>
+    <displayfeedback>1</displayfeedback>
+    <testcases>
+    </testcases>
+  </question>
+
+</quiz>
