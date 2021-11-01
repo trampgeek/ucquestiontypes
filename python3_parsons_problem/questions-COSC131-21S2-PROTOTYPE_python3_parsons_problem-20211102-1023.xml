@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <quiz>
-<!-- question: 84424  -->
+<!-- question: 9322  -->
   <question type="coderunner">
     <name>
       <text>PROTOTYPE_python3_parsons_problem</text>
@@ -8,7 +8,7 @@
     <questiontext format="html">
       <text><![CDATA[<h2>The prototype for a Parson's Problem in Python</h2>
 <p>This prototype defines, via the CodeRunner <code>__twigprefix__</code> mechanism a single Twig macro <code>global_extra(jumbled_code)</code> which takes as a parameter a multiline string of left-justified Python3 program lines.</p><p>Questions of this type must set their global extra field to the single line</p>
-  <pre>  {% _self.global_extra(jumbled_code) %}  </pre>
+  <pre>{{ _self.global_extra(jumbled_code) }}</pre>
 <p>where <code>jumbed_code</code> is a Twig variable. It will normally be defined via a template parameter to be a multiline string obtained by taking the Python program (the goal program that the student is expected to achieve), stripping all indentation and shuffling the order of the lines.
 </p><p>For example, if a Python3 template pre-processor is used, the template parameters for a question of this type might be of the form:</p>
 <pre>import json, random
@@ -26,7 +26,7 @@ print(json.dumps({"jumbled_code": '\n'.join(code_lines),
                   "answer": json.dumps(answer)}))
 </pre>
 <p>which also defines a template parameter for the answer, so that the question author's answer field can simple be written as <code>{{answer}}</code>.</p>
-<p>The question text and all the test data are just as normal for testing the code defined as the <code>code</code> variable within the template parameter.</p>]]></text>
+<p>The question text and all the test data are just as normal for testing the code defined as the <code>code</code> variable within the template parameter.</p><p>Note: the <em>Twig All </em>checkbox must be checked for all questions of this type.<br></p>]]></text>
     </questiontext>
     <generalfeedback format="html">
       <text></text>
@@ -617,6 +617,7 @@ print(json.dumps({'__twigprefix__': __twigprefix__}))
     <filenamesregex></filenamesregex>
     <filenamesexplain></filenamesexplain>
     <displayfeedback>1</displayfeedback>
+    <giveupallowed>0</giveupallowed>
     <testcases>
     </testcases>
   </question>
