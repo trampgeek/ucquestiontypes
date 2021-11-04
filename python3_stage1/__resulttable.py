@@ -190,8 +190,9 @@ class ResultTable:
             # Matching with a floating point tolerance.
             # Use float pattern from Markus Schmassmann at
             # https://stackoverflow.com/questions/12643009/regular-expression-for-floating-point-numbers
+            # except we don't match inf or nan which can be embedded in text strings.
             tol = float(self.params['floattolerance'])
-            float_pat = r'([-+]?(?:(?:(?:[0-9]+[.]?[0-9]*|[.][0-9]+)(?:[ed][-+]?[0-9]+)?)|(?:inf)|(?:nan)))'
+            float_pat = r'([-+]?(?:(?:(?:[0-9]+[.]?[0-9]*|[.][0-9]+)(?:[ed][-+]?[0-9]+)?)))'
             s1_bits = re.split(float_pat, s1)
             s2_bits = re.split(float_pat, s2)
             if len(s1_bits) != len(s2_bits):
@@ -203,7 +204,7 @@ class ResultTable:
                 try:
                     f1 = float(bit1)
                     f2 = float(bit2)
-                    if not (abs(f1 - f2) <= tol or (f1 != 0.0 and abs((f1 - f2) / f1) <= tol)):
+                    if abs(f1 - f2) > tol * 1.001: # Allow tolerance on the float tolerance!
                         match = False
                 except ValueError:
                     if bit1 != bit2:
