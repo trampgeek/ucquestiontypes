@@ -28,9 +28,18 @@ def my_interpolate(data, xs):
         return zip(xs, interpolate.splev(xs, tck))  # Evaluate at required x values
 
 
+def fmt_float(x):
+    """Return a formatted floating point number to 2 digits accuracy,
+       replacing -0.00 with 0.00"""
+    s = f"{x:0.2f}"
+    if s == "-0.00":
+        s = "0.00"
+    return s
+
+
 def fmt_float_pair(p):
     """A formatted point or other pair of floating-point numbers"""
-    return f"({p[0]:.2f}, {p[1]:.2f})"
+    return f"({fmt_float(p[0])}, {fmt_float(p[1])})"
 
 
 def tick_fmt(tick):
@@ -52,7 +61,7 @@ def normalise_colour(colour):
     return f"RGB({rgb[0]:0.2f}, {rgb[1]:0.2f}, {rgb[2]:0.2f})"
 
 
-def print_lines(subplot, x_samples, show_colour, has_legend):
+def print_lines(subplot, x_samples, show_colour, has_legend, sort_points):
     """Print all lines in the plot showing y values interplolated at the given x sample points,
        if not None. Otherwise print just the first 5 and last 5 points. Also
        show line colours if show_colour is True.
@@ -85,8 +94,14 @@ def print_lines(subplot, x_samples, show_colour, has_legend):
         else:
             print(f"Num points: {len(data)}")
             n = min(len(data), 5)
+            if sort_points:
+                # Convert 2D numpy array to a list of tuples
+                data = sorted([(data_element[0], data_element[1]) for data_element in data])
+                extra_text = ' (after sorting)'
+            else:
+                extra_text = ''
             points = '\n    '.join(fmt_float_pair(p) for p in data[:n])
-            print(f"First {n} points:\n    {points}")
+            print(f"First {n} points{extra_text}:\n    {points}")
             last_n = min(len(data) - n, 5)
             if last_n:
                 points = '\n    '.join(fmt_float_pair(p) for p in data[-last_n:])
@@ -103,24 +118,38 @@ def in_range(labels, limits):
     try:
         clipped_labels = []
         for s in labels:
-            s_orig = s
             if isinstance(s, str):
                 s = s.replace('−', '-')
             if limits[0] <= float(s) <= limits[1]:
-                clipped_labels.append(s_orig)
+                clipped_labels.append(s)
         return clipped_labels
     except ValueError:
         return labels
 
 
-def print_bars(subplot, show_colour):
-    """Print a list of all bars"""
+def print_bars(subplot, bar_indices=None, show_colour=False, show_barx=False):
+    """Print a list of all bars if bar_indices is None or a list of the
+       bars with the given indices, otherwise.
+    """
     print("Bars:")
     bars = subplot.patches
     if bars and show_colour:
         print(f"First bar colour: {normalise_colour(bars[0].get_facecolor())}")
-    for i, bar in enumerate(subplot.patches):
-        print(f"Bar{i}: x = {int(bar.get_xy()[0] + bar.get_width() / 2)} height = {bar.get_height():.2f}")
+    if bar_indices is None:
+        bar_indices = range(0, len(subplot.patches))
+    for i in bar_indices:
+        try:
+            bar = subplot.patches[i]
+            if show_barx:
+                x = int(bar.get_xy()[0] + bar.get_width() / 2)
+                bar_spec = f"Bar{i}: x = {x:.2f} height = {bar.get_height():.2f}"
+            else:
+                bar_spec = f"Bar{i}: height = {bar.get_height():.2f}"
+            print(bar_spec)
+        except IndexError:
+            print(f"Bar{i} not found. Number of bars = {len(subplot.patches)}")
+            break
+        
         
         
 def tick_label_text(labels):
@@ -131,11 +160,17 @@ def tick_label_text(labels):
     return label_text   
 
 
-def print_plot_info(data_type, x_samples=None,
+def print_plot_info(data_type,
+                    x_samples=None,
+                    bar_indices=None,
                     show_xlim=False, show_ylim=False,
                     show_colour=False,
                     show_xticklabels=None,  # Default is True for bar chars, False otherwise
-                    show_yticklabels=False
+                    show_yticklabels=False,
+                    show_xticks=False,
+                    show_yticks=False,
+                    show_barx=False,
+                    sort_points=False,
                     ):
     """Output key attributes of current plot, as defined by plt.gca().
        data_type must be one of 'points', 'lines' or 'bars', to print the
@@ -170,12 +205,16 @@ def print_plot_info(data_type, x_samples=None,
             if show_ylim:
                 print(f"Y-axis limits: {fmt_float_pair(ylim)}")
             if data_type == 'points':
-                print_lines(subplot, None, show_colour, has_legend)
+                print_lines(subplot, None, show_colour, has_legend, sort_points)
             elif data_type == 'lines':
-                print_lines(subplot, x_samples, show_colour, has_legend)
+                print_lines(subplot, x_samples, show_colour, has_legend, sort_points)
             elif data_type == 'bars':
-                print_bars(subplot, show_colour)
-
+                print_bars(subplot, bar_indices, show_colour, show_barx)
+                
+            if show_xticks:
+                x_ticks = [tick_fmt(pos) for pos in subplot.get_xticks()]
+                print('\nX-axis ticks:', ', '.join(x_ticks))
+                
             if show_xticklabels or (show_xticklabels is None and data_type == 'bars'):
                 x_tick_labels = [label.get_text() for label in subplot.get_xticklabels()]
                 if all(label.strip() == '' for label in x_tick_labels):
@@ -183,7 +222,11 @@ def print_plot_info(data_type, x_samples=None,
                 x_tick_labels = in_range(x_tick_labels, xlim)
                 print('\nX-axis tick labels:')
                 print(tick_label_text(x_tick_labels))
-                
+                    
+            if show_yticks:
+                y_ticks = [tick_fmt(pos) for pos in subplot.get_yticks()]
+                print('\nY-axis ticks:', ', '.join(y_ticks))
+
             if show_yticklabels:
                 y_tick_labels = [label.get_text() for label in subplot.get_yticklabels()]
                 if all(label.strip() == '' for label in y_tick_labels):
