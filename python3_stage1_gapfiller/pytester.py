@@ -84,11 +84,11 @@ class PyTester(Tester):
             # Style-check the program without any test cases or other postlude added
             errors = self.style_checker.style_errors()
         except Exception as e:
-            error_text = '*** Unexpected error while running precheckers. Please report ***\n' + str(e)
+            error_text = '*** Unexpected error while runner precheckers. Please report ***\n' + str(e)
             errors = [error_text]
         errors = [self.adjust_error_line_nums(error) for error in errors]
 
-        if len(errors) == 0 or self.params.get('forcelocalprechecks', False):
+        if len(errors) == 0:
             try:
                 errors = self.style_checker.local_errors() # Note: prelude not included so don't adjust line nums
             except Exception as e:
@@ -154,10 +154,6 @@ class PyTester(Tester):
             tester += test.extra + '\n'
 
         if self.params['usesmatplotlib']:
-            if 'dpi' in self.params and self.params['dpi']:
-                extra = f", dpi={self.params['dpi']}"
-            else:
-                extra = ''
             if self.params.get('running_sample_answer', False):
                 column = 'Expected'
             else:
@@ -169,7 +165,7 @@ class PyTester(Tester):
                 '    _mpl.pyplot.figure(fig)',
                 '    row = {}'.format(test_num),
                 '    column = "{}"'.format(column),
-                '    _mpl.pyplot.savefig("_image{}.{}.{}.png".format(fig, column, row), bbox_inches="tight"' + '{})'.format(extra),
+                '    _mpl.pyplot.savefig("_image{}.{}.{}.png".format(fig, column, row), bbox_inches="tight")',
                 '    _mpl.pyplot.close(fig)'
             ]) + '\n'
         return tester

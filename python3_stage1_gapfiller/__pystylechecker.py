@@ -41,7 +41,7 @@ class StyleChecker:
 
         if 'pylint' in precheckers:
             try:  # Run pylint
-                cmd = 'python3.10 -m pylint ' + ' '.join(pylint_opts) + ' __source.py'
+                cmd = 'python3.9 -m pylint ' + ' '.join(pylint_opts) + ' __source.py'
                 result = subprocess.check_output(cmd,
                                              stderr=subprocess.STDOUT,
                                              universal_newlines=True,
@@ -69,7 +69,7 @@ class StyleChecker:
             code_to_check = 'from typing import List as list, Dict as dict, Tuple as tuple, Set as set, Any\n' + code_to_check
             with open('__source2.py', 'w', encoding='utf-8') as outfile:
                 outfile.write(code_to_check)
-            cmd = 'python3.10 -m mypy --no-error-summary --no-strict-optional __source2.py'
+            cmd = 'python3.8 -m mypy --no-error-summary --no-strict-optional __source2.py'
             try: # Run mypy
                 subprocess.check_output(cmd,  # Raises an exception if there are errors
                                      stderr=subprocess.STDOUT,
@@ -91,23 +91,6 @@ class StyleChecker:
             errors.append("Sorry, but your code doesn't pass the style checks.")
 
         return errors
-    
-    def prettied(self, construct):
-        """Expand, if possible, the name of the given Python construct to a more
-           user friendly version, e.g. 'listcomprehension' -> 'list comprehension'
-        """
-        expanded = {
-            'listcomprehension': 'list comprehension',
-            'while': 'while loop',
-            'for': 'for loop',
-            'try': 'try ... except statement',
-            'dictcomprehension': 'dictionary comprehension',
-            'slice': 'slice'
-        }
-        if construct in expanded:
-            return expanded[construct]
-        else:
-            return f"{construct} statement"
 
     def local_errors(self):
         """Perform various local checks as specified by the current set of
@@ -127,9 +110,6 @@ class StyleChecker:
                     errors.append(required['errormessage'])
                 elif 'string' in required and required['string'] not in self.student_answer:
                     errors.append(required['errormessage'])
-
-        if self.params.get('banglobalcode', True):
-            errors += self.find_global_code()
 
         if not self.params.get('allownestedfunctions', True):
             # Except for legacy questions or where explicitly allowed, nested functions are banned
@@ -157,13 +137,11 @@ class StyleChecker:
 
         missing_constructs = self.find_missing_required_constructs()
         for reqd in missing_constructs:
-            expanded = self.prettied(reqd)
-            errors.append(f"Your program must include at least one {expanded}.")
+            errors.append("Your program must include at least one " + reqd + " statement.")
 
         bad_constructs = self.find_illegal_constructs()
         for notallowed in bad_constructs:
-            expanded = self.prettied(notallowed)
-            errors.append(f"Your program must not include any {expanded}s.")
+            errors.append("Your program must not include any " + notallowed + "s.")
 
         num_constants = len([line for line in self.student_answer.split('\n') if re.match(' *[A-Z_][A-Z_0-9]* *=', line)])
         if num_constants > self.params['maxnumconstants']:
@@ -436,37 +414,6 @@ class StyleChecker:
         visitor = MyVisitor()
         visitor.visit(self.tree)
         return bad_funcs
-
-
-    def find_global_code(self):
-        """Return a list of error messages relating to the existence of
-           any global assignment, for, while and if nodes. Ignores
-           global assignment statements with an ALL_CAPS target."""
-
-        global_errors = []
-        class MyVisitor(ast.NodeVisitor):
-            def visit_Assign(self, node):
-                if node.col_offset == 0:
-                    if len(node.targets) > 1:
-                        global_errors.append(f"Multiple targets in global assignment statement at line {node.lineno}")
-                    elif not node.targets[0].id.isupper():
-                        global_errors.append(f"Global assignment statement at line {node.lineno}")
-
-            def visit_For(self, node):
-                if node.col_offset == 0:
-                    global_errors.append(f"Global for loop at line {node.lineno}")
-
-            def visit_While(self, node):
-                if node.col_offset == 0:
-                    global_errors.append(f"Global while loop at line {node.lineno}")
-
-            def visit_If(self, node):
-                if node.col_offset == 0:
-                    global_errors.append(f"Global if statement at line {node.lineno}")
-
-        visitor = MyVisitor()
-        visitor.visit(self.tree)
-        return global_errors
 
 
     def find_nested_functions(self):

@@ -88,7 +88,6 @@ class StyleChecker:
 
         if result:
             errors = result.strip().splitlines()
-            errors.append("Sorry, but your code doesn't pass the style checks.")
 
         return errors
     
@@ -447,7 +446,7 @@ class StyleChecker:
         class MyVisitor(ast.NodeVisitor):
             def visit_Assign(self, node):
                 if node.col_offset == 0:
-                    if len(node.targets) > 1:
+                    if len(node.targets) > 1 or isinstance(node.targets[0], ast.Tuple):
                         global_errors.append(f"Multiple targets in global assignment statement at line {node.lineno}")
                     elif not node.targets[0].id.isupper():
                         global_errors.append(f"Global assignment statement at line {node.lineno}")
