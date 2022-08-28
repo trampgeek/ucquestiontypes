@@ -11,26 +11,28 @@ import json
 import os
 import sys
 import os.path
-import time
 import urllib.parse
 from collections import defaultdict
 from enum import Enum
 from random import randint
-
 from zipfile import ZipFile
 
 MAX_CELL_ROWS = 20
 MAX_CELL_COLS = 65
 MAX_STRING_LENGTH = 10000   # Max length of a Data-URI encoded string
 MEMLIMIT = 4000000          # Max k-bytes for stack and data segments
+TICKS_PER_SEC = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+PID = os.getpid()
+VALIDATOR_FILENAME = 'validator_from_archive.zip'
 
 KNOWN_PARAMS = {
     "answer_language": "cpp",   # Used only by validator - ignore it
-    "cflags": "-std=gnu99 -w -O2",
-    "cppflags": "-std=c++11 -w -O2",
+    "cflags": "-std=gnu17 -w -O2",
+    "cppflags": "-std=gnu++17 -w -O2",
+    "cldflags": "-lm",
     "float_tolerance": None,   # Hacked up attempt to mimic domjudge
     "fsizelimit": 8192,        # Maximum output (incl. stdout) file size (512byte blocks)
-    "pertest_timeout": None,   # Timeout (secs) on each test (actual default is 10 secs).
+    "pertest_timeout": None,   # Timeout (cpu secs) on each test (actual default is 10 secs).
     "problem_spec_filename": "", # Name of file containing problem spec
     "programming_contest_problem": True,  # We wouldn't be here without this one!
     "result_table_header": 'Sample test case results (all other tests are hidden)',   # Header to display above result table.
@@ -38,22 +40,16 @@ KNOWN_PARAMS = {
     "show_all_tests": False,    # True to display all tests
     "show_spoiler": True,       # True to display a spoiler button for first failing test
     "show_tests": [],  # Numbers of test cases to be displayed in the result table
-    "total_timeout": 120,       # Maximum permitted time budget.
+    "total_timeout": 120,       # Maximum permitted time budget (cpu secs).
     "validator_zip_filename": "",
     "tests_zip_filename": ""
 }
 
+class BadTestData(Exception): pass
 
-class BadTestData(Exception):
-    pass
+class ValidatorBuildFailure(Exception): pass
 
-
-class ValidatorBuildFailure(Exception):
-    pass
-
-
-class ValidatorFailure(Exception):
-    pass
+class ValidatorFailure(Exception):  pass
 
 
 class State(Enum):
@@ -77,6 +73,15 @@ Sorry but this server doesn't permit full testing of your answer.
 This is probably not your fault.""",
     State.bad_test_data: "Answer cannot be tested"}
     
+def process_cpu_time():
+    """Return the process CPU time in secs of this process and its various
+       children. The reference is arbitary, so only differences are meaningful.
+       We use this rather than perf_counter as perf_counter measures wall clock
+       time but our time budget in runguard is CPU secs.
+    """
+    with open(f"/proc/{PID}/stat") as infile:
+        cpu_times = map(int, infile.readline().split()[14:18])
+        return sum(cpu_times) / TICKS_PER_SEC
 
 def htmlise(s):
     """Convert newlines to <br> and tweak '<'"""
@@ -138,7 +143,7 @@ class Results:
 
 class JobRunner:
     """The class that handles compiling, running and grading a submissions"""
-    FREE_BOARD_SECS = 5   # Number of seconds freeboard to allow for cleaning up, overheads etc.
+    FREE_BOARD_SECS = 2   # Number of seconds freeboard to allow for cleaning up, overheads etc.
     # Default timeout, only if pertest_timeout parameter missing and no domjudge-ini timeout
     DEFAULT_PER_TEST_TIMEOUT = 10
 
@@ -162,18 +167,19 @@ class JobRunner:
             zipfile.close()
             cwd = os.getcwd()
             os.chdir('Validator')
+            cpp_filenames = [filename for filename in os.listdir() if filename.endswith(".cpp")]
             if os.path.isfile('build'):
                 build_result = subprocess.run(['/bin/bash', 'build'],
                                           encoding='utf-8',
                                           stdout=subprocess.PIPE,
                                           stderr=subprocess.STDOUT)
-            elif os.path.isfile('validator.cpp'):
-                build_result = subprocess.run(['/usr/bin/g++', 'validator.cpp', '-o', 'run'],
+            elif len(cpp_filenames) == 1:
+                build_result = subprocess.run(['/usr/bin/g++', cpp_filenames[0], '-o', 'run'],
                                           encoding='utf-8',
                                           stdout=subprocess.PIPE,
                                           stderr=subprocess.STDOUT)
             else:
-                raise Exception("No build file for validator and no validator.cpp")
+                raise Exception("No build file for validator and no (single) cpp source file")
             os.chdir(cwd)
             if build_result.returncode == 0:
                 os.chmod('Validator/run', 0O755)
@@ -187,14 +193,14 @@ class JobRunner:
         with open('test_stdin', 'w') as outfile:
             outfile.write(stdin)
         with open('test_expected', 'w') as outfile:
-            outfile.write(expected.rstrip())
+            outfile.write(expected)
         try:
             os.mkdir('validator_feedback')
         except FileExistsError:
             pass
         validator_result = subprocess.run([
             self.validator, 'test_stdin', 'test_expected', 'validator_feedback'],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, input=got.rstrip(), encoding='utf-8')
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, input=got, encoding='utf-8')
         if validator_result.returncode == 42:
             return True
         elif validator_result.returncode == 43:
@@ -250,53 +256,29 @@ class JobRunner:
         rest = sorted(set(range(0, len(self.tests))) - set(shows))
         return shows + rest
 
-    def run_all_tests(self, end_time):
-        """Run the compiled program (defined by self.exec_command, set by previous compile)
-           on all tests passed to the constructor.
-           Must complete by given end_time (perf_counter, secs).
-           Return value is a Results object (q.v.)
-        """
-
-        if self.params['pertest_timeout'] is None:
-            if self.timeout is not None:
-                self.params['pertest_timeout'] = self.timeout
-            else:
-                self.params['pertest_timeout'] = JobRunner.DEFAULT_PER_TEST_TIMEOUT
-        results = Results()
-
-        for i in self.test_sequence():
-            is_sample, stdin, expected = self.tests[i]
-            secs_remaining = end_time - time.perf_counter()
-            pertest_timeout = self.params['pertest_timeout']
-            test_result = self.run_one_test(stdin, secs_remaining, pertest_timeout)
-            if test_result.state == State.correct and not self.match(self.tests[i], test_result.output):
-                test_result.state = State.wrong_answer
-            is_shown = is_sample or self.params['show_all_tests'] or i in self.params['show_tests'] or (
-                self.params['show_first_fail'] and test_result.state != State.correct)
-            results.add_row(i, test_result, stdin, expected, not is_shown)
-            if test_result.state != State.correct:
-                break  # Lazy evaluation
-        return results
-        
     def get_output(self, stdoutfile, stderrfile):
         """Read the subprocesses standard output and standard error files"""
         output = ''
         with open(stdoutfile) as out:
             output += out.read()
         with open(stderrfile) as err:
-            spacer = '\n' if output else ''
-            output += spacer + err.read()
-        return output.rstrip()
+            stderr_output = err.read()
+            if stderr_output:
+                spacer = '\n====Output prior to error====\n' if output else ''
+                output = stderr_output + spacer + output
+        return output
 
     def run_one_test(self, stdin, remaining_secs, pertest_timeout):
         """ Run a single test of the compiled ready-to-run program
-            using the given exec_command. remaining_secs is the total time
+            using the given exec_command. remaining_secs is the total CPU time
             remaining. The job will be run with a time out pertest_timeout or
-            remaining_secs, whichever is the smaller. If the test times out
-            at pertest_timeout, it is considered a failure. However, if remaining_secs
-            is less than that and the job times out, it is considered a question-type
-            failure as the total time budget was insufficient for testing. In this
-            case InsufficientTimeBudget is raised.
+            remaining_secs, whichever is the smaller. All times are CPU times,
+            not wall clock time (since runguard uses ulimit -t which is CPU time).
+            If the test times out at pertest_timeout, it is considered a failure.
+            However, if remaining_secs  is less than that and the job times out, 
+            it is considered a question-type failure as the total time budget
+            was insufficient for testing. In this case InsufficientTimeBudget is
+            raised.
             return value is a TestResult object in which the State is 'correct' if
             no runtime errors occurred. This might later change to wrong_answer when
             the output is checked.
@@ -306,8 +288,8 @@ class JobRunner:
         output = ''
         timeout = int(min(remaining_secs, pertest_timeout))
         if timeout <= 0:
-            return TestResult(State.time_budget_exceeded, "")
-        t_start = time.perf_counter()
+            return TestResult(State.time_budget_exceeded, "*** Time budget exceeded ***")
+        t_start = process_cpu_time()
         state = State.correct  # In this context, 'correct' means the run didn't break
         cmd = ' '.join(self.exec_command)
         fsizelimit = self.params['fsizelimit']
@@ -328,14 +310,14 @@ class JobRunner:
             output = self.get_output('__stdout__.txt', '__stderr__.txt')
             state = State.runtime_error
             spacer = '\n' if output else ''
-            if output.endswith('Killed'):
+            if output.startswith('Killed'):
                 # Job killed by bash, almost certainly due to ulimit.
                 # We assume that if wall clock time has run out, that the ulimit
                 # that was hit was cpu time. However, ulimit can actually kill
                 # a job due to CPU time *before* the wall clock time has reached
                 # (evidenced by Java). Hence the cautious classification in
                 # the following.
-                if time.perf_counter() - t_start >= timeout:
+                if process_cpu_time() - t_start >= timeout:
                     # Job timed out. Decide if this is a test case timeout
                     #  (user's fault) or total time budget exceeded (our fault).
                     if timeout >= pertest_timeout:
@@ -365,6 +347,36 @@ class JobRunner:
 
         return TestResult(state, output)
 
+    def run_all_tests(self, end_time):
+        """Run the compiled program (defined by self.exec_command, set by previous compile)
+           on all tests passed to the constructor.
+           Must complete by given end_time (which is measured in CPU secs,
+           not wall clock time), which is the value returned by process_cpu_time.
+           Return value is a Results object (q.v.)
+        """
+
+        if self.params['pertest_timeout'] is None:
+            if self.timeout is not None:
+                self.params['pertest_timeout'] = self.timeout
+            else:
+                self.params['pertest_timeout'] = JobRunner.DEFAULT_PER_TEST_TIMEOUT
+        results = Results()
+
+        for i in self.test_sequence():
+            is_sample, stdin, expected = self.tests[i]
+            secs_remaining = end_time - process_cpu_time()
+            pertest_timeout = self.params['pertest_timeout']
+            test_result = self.run_one_test(stdin, secs_remaining, pertest_timeout)
+            if test_result.state == State.correct and not self.match(self.tests[i], test_result.output):
+                test_result.state = State.wrong_answer
+            is_shown = is_sample or self.params['show_all_tests'] or i in self.params['show_tests'] or (
+                self.params['show_first_fail'] and test_result.state != State.correct)
+            #test_result.output += f"\n[Job was run with {secs_remaining:.2f} secs remaining]"
+            results.add_row(i, test_result, stdin, expected, not is_shown)
+            if test_result.state != State.correct:
+                break  # Lazy evaluation
+        return results
+
     def compile(self, filename):
         """Compile C, C++, C# and Java (and Python, but it's almost a no-op).
            Return the output from the compile (empty if a clean compile)
@@ -375,7 +387,8 @@ class JobRunner:
 
         if self.language == 'c':
             cflags = self.params['cflags']
-            command = f"gcc {cflags} -o {basename} {filename}"
+            cldflags = self.params['cldflags']
+            command = f"gcc {cflags} -o {basename} {filename} {cldflags}"
             compile_result = subprocess.run(
                 command.split(),
                 stdout=subprocess.PIPE,
@@ -399,7 +412,7 @@ class JobRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 universal_newlines=True)
-            self.exec_command = ["java", "-Xss64m", "-Xmx500m", basename]
+            self.exec_command = ["java", "-Xss64m", "-Xmx512m", basename]
             
         elif self.language == 'csharp':
             compile_result = subprocess.run(	
@@ -452,8 +465,8 @@ class JobRunner:
            Return a Result object.
         """
 
-        # Compute the time by which we must be done (less 2 second for safety margin)
-        start_time = time.perf_counter()
+        # Compute the time by which we must be done (less FREE_BOARD SECS for cleaning up)
+        start_time = process_cpu_time()
         end_time = start_time + self.params['total_timeout'] - self.FREE_BOARD_SECS
         try:
             error_message = self.make_executable()
@@ -504,6 +517,7 @@ def tests_and_timeout_from_zip(zipfilename):
                 with zf.open(f"{folder}{outfiles[i]}") as infile:
                     expected = infile.read().decode('utf-8')
                 is_sample = 'sample' in folder or infiles[i].lower().startswith('samp')
+                expected = expected.replace('\r', '')  # Windows line endings, grrr.
                 tests.append((is_sample, stdin, expected))
                 
     timeout = None
@@ -517,11 +531,10 @@ def tests_and_timeout_from_zip(zipfilename):
                     timeout = int(match_obj[1])
     return tests, timeout
     
-
-def get_all_tests(params):
-    """Unzip the expected .zip attachment and extract a list of tests from it.
-       A test is a (issample, stdin, expected) tuple.
-       Return value is a tuple: (timeout value. list of tests).
+def get_zip_filename(params):
+    """Try to find the ICPC problem archive zip, either via a specified
+       filename in the params or by the presence of a single zip file
+       in the current working directory. Return its name.
     """
     zipfilename = params.get('tests_zip_filename', '')
     if not zipfilename:
@@ -531,13 +544,40 @@ def get_all_tests(params):
             zipfilename = zips[0]
         else:
             raise BadTestData(f"We're dead fred! Expected exactly one .zip file. Got: {str(files)}")
+    return zipfilename
+    
 
+def get_all_tests(params):
+    """Unzip the expected .zip attachment and extract a list of tests from it.
+       A test is a (issample, stdin, expected) tuple.
+       Return value is a tuple: (timeout value. list of tests).
+    """
+    zipfilename = get_zip_filename(params)
     tests, timeout = tests_and_timeout_from_zip(zipfilename)
     if len(tests) == 0:
         raise BadTestData('No test data found!')
 
     return tests, timeout
-
+    
+    
+def get_validator_from_zip(params):
+    """If the zip archive file has an entry for output_validators/*.zip,
+       extract it to a file and return its filename. Otherwise return None.
+    """
+    zipfilename = get_zip_filename(params)
+    zf = ZipFile(zipfilename)
+    filenames = zf.namelist()    
+    validators = [f for f in filenames if 'output_validators/' in f and f.endswith('.zip')]
+    if not validators:
+        return None
+    if len(validators) > 1:
+        raise ValidatorFailure("More than one validator found in zip")
+    with zf.open(validators[0]) as infile:
+        zip_contents = infile.read()
+        with open(VALIDATOR_FILENAME, 'wb') as validator:
+            validator.write(zip_contents)
+    return VALIDATOR_FILENAME
+        
 
 def get_question_params():
     params = json.loads("""{{ QUESTION.parameters | json_encode | e('py') }}""")
@@ -554,7 +594,7 @@ def get_question_params():
     cputimelimit = json.loads("""{{ QUESTION.cputimelimitsecs | json_encode | e('py') }}""")
 
     if cputimelimit and params['total_timeout'] > int(cputimelimit):
-        raise Exception("total_timeout cannot exceed cputimelimitsecs value in prototype")
+        raise Exception("total_timeout cannot exceed cputimelimitsecs value in prototype  ({cputimelimit} secs)")
     return params
     
     
@@ -592,6 +632,13 @@ def main():
     can_view_hidden = student.get('canviewhidden', False)
     params = get_question_params()
     tests, timeout = get_all_tests(params)
+    validator_file_name = get_validator_from_zip(params)
+    if validator_file_name:
+        if params['validator_zip_filename']:
+            raise Validator_Failure('Validator present in zip and also specified in params')
+        else:
+            params['validator_zip_filename'] = validator_file_name
+
     job_runner = JobRunner(student_answer, language, params, tests, timeout)
 
     try:
