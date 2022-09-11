@@ -240,7 +240,7 @@ class JobRunner:
                                           stdout=subprocess.PIPE,
                                           stderr=subprocess.STDOUT)
             elif len(cpp_filenames) == 1:
-                build_result = subprocess.run(['/usr/bin/g++', cpp_filenames[0], '-o', 'run'],
+                build_result = subprocess.run(['/usr/bin/g++', cpp_filenames[0], '-std=c++17', '-o', 'run'],
                                           encoding='utf-8',
                                           stdout=subprocess.PIPE,
                                           stderr=subprocess.STDOUT)
@@ -501,7 +501,7 @@ class JobRunner:
            case the value self.exec_command has the command to run the executable.
            If there's any compile error, return the compiler output.
         """
-        language_extension_map = {'c': 'c', 'cpp': 'cpp', 'java': 'java', 'python3': 'py', 'csharp': 'cs'}
+        language_extension_map = {'c': 'c', 'cpp': 'cpp', 'java': 'java', 'python3': 'py', 'csharp': 'cs', 'cs': 'cs'}
         if self.language not in language_extension_map.keys():
             raise Exception('Error in question. Unknown/unexpected language ({})'.format(self.language))
 
@@ -757,13 +757,13 @@ main()
     <memlimitmb>16000</memlimitmb>
     <sandboxparams><![CDATA[{"disklimit": 50, "streamsize": 5, "numprocs": 50}]]></sandboxparams>
     <templateparams><![CDATA[{
-    "programming_contest_problem": true, "pertest_timeout": 40
+    "programming_contest_problem": true, "pertest_timeout": 10
 }]]></templateparams>
     <hoisttemplateparams>1</hoisttemplateparams>
     <templateparamslang>twig</templateparamslang>
     <templateparamsevalpertry>0</templateparamsevalpertry>
     <templateparamsevald><![CDATA[{
-    "programming_contest_problem": true, "pertest_timeout": 40
+    "programming_contest_problem": true, "pertest_timeout": 10
 }]]></templateparamsevald>
     <twigall>0</twigall>
     <uiplugin>ace</uiplugin>
