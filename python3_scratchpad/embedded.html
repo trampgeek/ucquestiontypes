@@ -16,7 +16,7 @@ document.getElementById("___textareaId___-ace_field1").rows = rows;
 </textarea>
 <div>
 <button id="___textareaId___-run-button" type="button" style='margin:5px;'>Run</button>
-<input type="checkbox" class="coderunner-ui-element" name='qtype_cr-prefix-answer' id="___textareaId___-prefix-answer">
+<input type="checkbox" class="coderunner-ui-element" name='qtype_cr-prefix-answer' id="___textareaId___-prefix-answer" checked>
 <label for="___textareaId___-prefix-answer" style="display:inline-block">Prefix with answer</label>
 <span style='float:right;color:#0f6cbf;padding:8px'><a role="button" id="___textareaId___-panel-help">What's this?</a></span>
 </div>
@@ -133,7 +133,7 @@ if stderr == '': # No syntax errors
     program_code = """${subprocCode}""";
     with open('prog.py', 'w') as outfile:
         outfile.write(program_code)
-    proc = subprocess.Popen(['python3', 'prog.py'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(['python3.10', 'prog.py'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         stdout, stderr = proc.communicate(timeout=3)
         returncode = proc.returncode
@@ -196,10 +196,10 @@ if (window.cr_debugging || window.diagnose_ws_response === undefined) {
 <script>
 document.getElementById("___textareaId___-panel-help").onclick = function() {
     alert("You can enter Python code into this panel and click 'Run' to execute it in the " +
-          "Python engine. Use this panel to get help on Python, e.g. 'print(dir(list))', " +
-          "to explore how small Python code fragments behave, or " +
-          "to check your answer. In the latter case, check the 'Prefix with answer' " +
-          "box so your answer code is inserted at the start.");
+          "Python engine. By default, the code in this panel is prefixed with the contents " +
+          "of the answer box, giving you an easy way to test your answer. You can uncheck the " +
+          "'Prefix with answer' checkbox to run the code in this panel standalone, e.g. to explore " +
+          "how small Python code fragments behave.");
 };
 </script>
 
