@@ -12,11 +12,16 @@ STANDARD_PYLINT_OPTIONS = ['--disable=trailing-whitespace,superfluous-parens,' +
                       'unbalanced-tuple-unpacking,too-many-statements,' +
                       'consider-using-enumerate,simplifiable-if-statement,' +
                       'consider-iterating-dictionary,trailing-newlines,no-else-return,' +
-                      'consider-using-dict-comprehension,' +
+                      'consider-using-dict-comprehension,unnecessary-lambda,' +
                       'len-as-condition,inconsistent-return-statements,consider-using-join,' +
                       'singleton-comparison,unused-variable,chained-comparison,no-else-break,' +
-	                  'consider-using-in,useless-object-inheritance,unnecessary-pass,' +	
-                      'consider-using-set-comprehension,no-else-raise,duplicate-string-formatting-argument',
+	                  'consider-using-in,useless-object-inheritance,unnecessary-pass,' +
+	                  'reimported,wrong-import-order,wrong-import-position,ungrouped-imports,' +
+                      'consider-using-set-comprehension,no-else-raise,duplicate-string-formatting-argument,' + 
+                      'consider-using-f-string,unspecified-encoding,' +
+                      'consider-using-dict-items,use-a-generator,' +
+                      'consider-using-max-builtin,unnecessary-lambda,consider-using-with,' +
+                      'consider-using-f-string,use-dict-literal',
                       '--enable=C0326',
                       '--good-names=i,j,k,n,s,c,_'
                       ]
@@ -29,13 +34,16 @@ KNOWN_PARAMS = {
     'banglobalcode': True,
     'allownestedfunctions': False,
     'checktemplateparams': True,
+    'dpi': 65,
     'echostandardinput': True,
     'extra': 'None',
     'floattolerance': None,
+    'forcepylint': False,
     'globalextra': 'None',
     'imagewidth': None,
     'imports': [],
     'isfunction': True,
+    'localprechecks': True,
     'maxfunctionlength': 30,
     'maxnumconstants': 4,
     'maxoutputbytes': 10000,
@@ -164,7 +172,7 @@ def scrambled(answer):
     rest2 = re.sub(r"'''.*?'''", '', rest)
     lines = [line.strip() for line in (rest2.splitlines() + docstrings) if line.strip()]
     original = lines[:]
-    while original == lines: # Make sure the order changes!
+    while len(lines) > 1 and original == lines: # Make sure the order changes!
         random.shuffle(lines)
     return '\n'.join(lines)
     
@@ -182,7 +190,7 @@ def process_global_params():
     PARAMS['STEP_INFO'] = json.loads("""{{ QUESTION.stepinfo | json_encode }}""")
     answer = """{{QUESTION.answer | e('py')}}""".strip()
     if answer:
-        if PARAMS['STUDENT_ANSWER'] == answer:
+        if PARAMS['STUDENT_ANSWER'].strip() == answer.strip():
             PARAMS['AUTHOR_ANSWER'] = "<p>Your answer is an <i>exact</i> match with the author's solution.</p>"
         else:
             with open("__author_solution.html") as file:
@@ -259,4 +267,3 @@ if test_cases:
             outcome['epiloguehtml'] = ''
         outcome['epiloguehtml'] += f'<div style="background-color: #f4f4f4">{feedback}</div>'
 print(json.dumps(outcome))
-
