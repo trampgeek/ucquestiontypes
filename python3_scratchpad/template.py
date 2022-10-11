@@ -8,22 +8,24 @@ import random
 from pytester import PyTester
 
 STANDARD_PYLINT_OPTIONS = ['--disable=trailing-whitespace,superfluous-parens,' +
-                           'bad-continuation,min-public-methods,too-few-public-methods,star-args,' +
-                           'unbalanced-tuple-unpacking,too-many-statements,' +
-                           'consider-using-enumerate,simplifiable-if-statement,' +
-                           'consider-iterating-dictionary,trailing-newlines,no-else-return,' +
-                           'consider-using-dict-comprehension,' +
-                           'len-as-condition,inconsistent-return-statements,consider-using-join,' +
-                           'singleton-comparison,unused-variable,chained-comparison,no-else-break,' +
-                           'consider-using-in,useless-object-inheritance,unnecessary-pass,' +
-                           'reimported,wrong-import-order,wrong-import-position,ungrouped-imports,' +
-                           'consider-using-set-comprehension,no-else-raise,' +
-                           'unspecified-encoding,use-dict-literal,,consider-using-with,' +
-                           'duplicate-string-formatting-argument,consider-using-dict-items,' +
-                           'consider-using-max-builtin',
-                           '--enable=C0326',
-                           '--good-names=i,j,k,n,s,c,_'
-                           ]
+                      'bad-continuation,min-public-methods,too-few-public-methods,star-args,' +
+                      'unbalanced-tuple-unpacking,too-many-statements,' +
+                      'consider-using-enumerate,simplifiable-if-statement,' +
+                      'consider-iterating-dictionary,trailing-newlines,no-else-return,' +
+                      'consider-using-dict-comprehension,' +
+                      'len-as-condition,inconsistent-return-statements,consider-using-join,' +
+                      'singleton-comparison,unused-variable,chained-comparison,no-else-break,' +
+	                  'consider-using-in,useless-object-inheritance,unnecessary-pass,' +
+	                  'reimported,wrong-import-order,wrong-import-position,ungrouped-imports,' +
+                      'consider-using-set-comprehension,no-else-raise,' +
+                      'unspecified-encoding,use-dict-literal,consider-using-with,' +
+                      'duplicate-string-formatting-argument,consider-using-dict-items,' +
+                      'consider-using-max-builtin,unnecessary-lambda,consider-using-with,' +
+                      'consider-using-f-string,unspecified-encoding,use-dict-literal,' + 
+                      'use-a-generator',
+                      '--enable=C0326',
+                      '--good-names=i,j,k,n,s,c,_'
+                      ]
 
 locale.setlocale(locale.LC_ALL, 'C.UTF-8')
 
@@ -33,13 +35,16 @@ KNOWN_PARAMS = {
     'banglobalcode': True,
     'allownestedfunctions': False,
     'checktemplateparams': True,
+    'dpi': 65,
     'echostandardinput': True,
     'extra': 'None',
     'floattolerance': None,
+    'forcepylint': False,
     'globalextra': 'None',
     'imagewidth': None,
     'imports': [],
     'isfunction': True,
+    'localprechecks': True,
     'maxfunctionlength': 30,
     'maxnumconstants': 4,
     'maxoutputbytes': 10000,
@@ -47,7 +52,7 @@ KNOWN_PARAMS = {
     'norun': False,
     'nostylechecks': False,
     'notest': False,
-    'parsonsproblemthreshold': None,  # The number of checks before parsons' problem displayed
+    'parsonsproblemthreshold': None, # The number of checks before parsons' problem displayed
     'precheckers': ['pylint'],
     'prelude': '',
     'proscribedbuiltins': ['exec', 'eval'],
@@ -68,10 +73,10 @@ KNOWN_PARAMS = {
             'onlyallow': []
         },
         'imp': {
-            'onlyallow': []
+            'onlyallow': []  
         },
         'importlib': {
-            'onlyallow': []
+            'onlyallow': []  
         },
         'os': {
             'disallow': ['system', '_exit', '_.*']
@@ -99,7 +104,6 @@ KNOWN_PARAMS = {
     'usesubprocess': False,
     'warnifpassiveoutput': True,
 }
-
 
 class TestCase:
     def __init__(self, dict_rep):
@@ -144,7 +148,7 @@ def process_template_params():
     if PARAMS['runextra']:
         PARAMS['extra'] = 'pretest'  # Legacy support
     if PARAMS['timeout'] < 2:
-        PARAMS['timeout'] = 2  # Allow 1 extra second freeboard
+        PARAMS['timeout'] = 2  # Allow 1 extra second freeboard 
     PARAMS['pylintoptions'] = STANDARD_PYLINT_OPTIONS + PARAMS['pylintoptions']
     if PARAMS['allowglobals']:
         PARAMS['pylintoptions'].append("--const-rgx='[a-zA-Z_][a-zA-Z0-9_]{2,30}$'")
@@ -169,11 +173,10 @@ def scrambled(answer):
     rest2 = re.sub(r"'''.*?'''", '', rest)
     lines = [line.strip() for line in (rest2.splitlines() + docstrings) if line.strip()]
     original = lines[:]
-    while original == lines:  # Make sure the order changes!
+    while len(lines) > 1 and original == lines: # Make sure the order changes!
         random.shuffle(lines)
     return '\n'.join(lines)
-
-
+    
 def get_answer():
     """Return the sample answer"""
     answer_json = """{{QUESTION.answer | e('py')}}""".strip()
@@ -182,8 +185,7 @@ def get_answer():
     except:
         answer = answer_json  # Assume this is the original solution
     return answer
-
-
+    
 def process_global_params():
     """Plug into the PARAMS variable all the "global" parameters from
        the question and its answer (as distinct from the template parameters).
@@ -192,9 +194,8 @@ def process_global_params():
     PARAMS['STUDENT_ANSWER'] = response['answer_code'][0].rstrip() + '\n'
     PARAMS['SEPARATOR'] = "#<ab@17943918#@>#"
     PARAMS['IS_PRECHECK'] = "{{ IS_PRECHECK }}" == "1"
-    PARAMS['QUESTION_PRECHECK'] = {{QUESTION.precheck}}  # Type of precheck: 0 = None, 1 = Empty etc
-    PARAMS[
-        'ALL_OR_NOTHING'] = "{{ QUESTION.allornothing }}" == "1"  # Whether or not all-or-nothing grading is being used
+    PARAMS['QUESTION_PRECHECK'] = {{ QUESTION.precheck }} # Type of precheck: 0 = None, 1 = Empty etc
+    PARAMS['ALL_OR_NOTHING'] = "{{ QUESTION.allornothing }}" == "1" # Whether or not all-or-nothing grading is being used
     PARAMS['GLOBAL_EXTRA'] = """{{ QUESTION.globalextra | e('py') }}\n"""
     PARAMS['STEP_INFO'] = json.loads("""{{ QUESTION.stepinfo | json_encode }}""")
     answer = get_answer()
@@ -227,8 +228,7 @@ def update_test_cases(test_cases, outcome):
         outcome['prologuehtml'] = "No 'Got' column in result table from which to get testcase expecteds"
         test_cases = None
     except Exception as e:
-        outcome[
-            'prologuehtml'] = "Unexpected error ({}) extracting testcase expecteds from sample answer output".format(e)
+        outcome['prologuehtml'] = "Unexpected error ({}) extracting testcase expecteds from sample answer output".format(e)
         test_cases = None
     return test_cases
 
@@ -247,8 +247,7 @@ def get_expecteds_from_answer(params, test_cases):
     tester = PyTester(new_params, test_cases)
     outcome = tester.test_code()
     if 'prologuehtml' in outcome:
-        outcome['prologuehtml'] = "<h2>ERROR IN QUESTION'S SAMPLE ANSWER. PLEASE REPORT</h2>\n" + outcome[
-            'prologuehtml']
+        outcome['prologuehtml'] = "<h2>ERROR IN QUESTION'S SAMPLE ANSWER. PLEASE REPORT</h2>\n" + outcome['prologuehtml']
         return outcome, None
     else:
         return outcome, update_test_cases(test_cases, outcome)
@@ -266,8 +265,7 @@ if test_cases:
     outcome = tester.test_code()
     feedback = ''
     parsons_threshold = float('inf') if PARAMS['parsonsproblemthreshold'] is None else PARAMS['parsonsproblemthreshold']
-    if outcome['fraction'] != 1 and not PARAMS['IS_PRECHECK'] and PARAMS['STEP_INFO'][
-        'numchecks'] + 1 >= parsons_threshold:
+    if outcome['fraction'] != 1 and not PARAMS['IS_PRECHECK'] and PARAMS['STEP_INFO']['numchecks'] + 1 >= parsons_threshold:
         feedback = PARAMS['AUTHOR_ANSWER_SCRAMBLED']
     elif outcome['fraction'] == 1 and PARAMS['showfeedbackwhenright'] and not (PARAMS['IS_PRECHECK']):
         outcome['prologuehtml'] = '<pre class="ace-highlight-code" style="display:none"></pre>'  # Kick filter into life
