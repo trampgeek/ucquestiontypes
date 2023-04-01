@@ -441,8 +441,10 @@ class StyleChecker:
     def find_global_code(self):
         """Return a list of error messages relating to the existence of
            any global assignment, for, while and if nodes. Ignores
-           global assignment statements with an ALL_CAPS target."""
-
+           global assignment statements with an ALL_CAPS target and
+           if __name__ == "__main__"
+        """
+        style_checker = self
         global_errors = []
         class MyVisitor(ast.NodeVisitor):
             def visit_Assign(self, node):
@@ -461,12 +463,20 @@ class StyleChecker:
                     global_errors.append(f"Global while loop at line {node.lineno}")
 
             def visit_If(self, node):
-                if node.col_offset == 0:
+                if node.col_offset == 0 and not style_checker.is_main_check(node):
                     global_errors.append(f"Global if statement at line {node.lineno}")
 
         visitor = MyVisitor()
         visitor.visit(self.tree)
         return global_errors
+
+
+    def is_main_check(self, node):
+        """Return True iff the given node is a check if the current module is '__main__'.
+           Just checks if both the strings '__name__' and '__main__' are present in the line.
+        """
+        line = self.student_answer.splitlines()[node.lineno - 1]
+        return '__main__' in line and '__name__' in line
 
 
     def find_nested_functions(self):
