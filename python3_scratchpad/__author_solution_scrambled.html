@@ -1,0 +1,47 @@
+<div class="coderunner-test-results bad">
+    <a class="btn btn-link coderunner-scrambled-solution-link" style="background-color:#FCC">Show scrambled author's solution</a>
+</div>
+<div class="coderunner-scrambled-authors-solution collapse" expanded="false" style="margin-bottom:8px">
+    <pre class="code-highlight">%s</pre>
+</div>
+<script>
+    window.coderunner_solution_link_clicked = window.coderunner_solution_link_clicked || function(src) {
+        var question = src.target.closest('div.specificfeedback');
+        var solution_div = question.getElementsByClassName('coderunner-scrambled-authors-solution')[0];
+        var solution_link = question.getElementsByClassName('coderunner-scrambled-solution-link')[0];
+        var code = question.getElementsByClassName('code-highlight')[0];
+
+        if (!code.classList.contains('has-highlight')) {
+            var highlight = window.ace.require("ace/ext/static_highlight");
+            highlight(code, {
+                mode: "ace/mode/python",
+                showGutter: false
+            }, function(highlighted) {
+                code.getElementsByClassName('ace_static_highlight')[0].style['font-size'] = "14px";
+            });
+            code.classList.add('has-highlight');
+        }
+        
+        if (!$(solution_div).hasClass('collapsing')) {
+            if ($(solution_div).attr("expanded") === "true") {
+                solution_link.innerHTML = "Show scrambled author's solution";
+                $(solution_div).collapse('hide');
+                $(solution_div).attr("expanded", "false");
+            } else {
+                solution_link.innerHTML = "Hide scrambled author's solution";
+                $(solution_div).collapse('show');
+                $(solution_div).attr("expanded", "true");
+            }
+        }
+    }
+    var coderunner_all_links = document.getElementsByClassName('coderunner-scrambled-solution-link');
+ 
+    for (var i = 0; i < coderunner_all_links.length; i++) {
+        var el = coderunner_all_links[i];
+        if (!el.classList.contains('has-click-handler')) {
+            el.addEventListener('click', window.coderunner_solution_link_clicked);
+            el.classList.add('has-click-handler');
+        }
+    }    
+</script>
+
