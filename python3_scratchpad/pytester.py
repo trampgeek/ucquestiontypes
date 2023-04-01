@@ -77,6 +77,13 @@ class PyTester(Tester):
         """
         prog = self.params['STUDENT_ANSWER'].lstrip()
         return prog.startswith('"') or prog.startswith("'")
+    
+
+    def tweaked_warning(self, message):
+        """Improve the warning message by updating line numbers and replacing <string>: with Line
+        """
+        return self.adjust_error_line_nums(message).replace('<string>:', 'Line ')
+    
 
     def style_errors(self):
         """Return a list of all the style errors. Start with local tests and continue with pylint
@@ -90,10 +97,15 @@ class PyTester(Tester):
                 errors += [str(e)]
             else:
                 check_for_passive = (self.params['warnifpassiveoutput'] and self.params['isfunction'])
-                if check_for_passive and self.passive_output():
-                    errors.append("Your code was not expected to generate any output " +
-                        "when executed stand-alone.\nDid you accidentally include " +
-                        "your test code?")
+                if check_for_passive:
+                    passive = self.passive_output()
+                    warning_messages = [line for line in passive.splitlines() if 'Warning:' in line]
+                    if warning_messages:
+                        errors += [self.tweaked_warning(message) for message in warning_messages]
+                    elif passive:
+                        errors.append("Your code was not expected to generate any output " +
+                                      "when executed stand-alone.\nDid you accidentally include " +
+                                      "your test code?")
 
         if len(errors) == 0 or self.params.get('forcepylint', False):
             # Run precheckers (pylint, mypy)
@@ -198,6 +210,7 @@ class PyTester(Tester):
                 (r'(.*: *)(\d+)(, *\d+:.*\(.*\).*)', [2]),
                 (r'(.*:)(\d+)(:\d+: [A-Z]\d+: .*line )(\d+)(.*)', [2, 4]),
                 (r'(.*:)(\d+)(:\d+: [A-Z]\d+: .*)', [2]),
+                (r'(.*:)(\d+)(: [a-zA-Z]*Warning.*)', [2]),
         ]
         output_lines = []
         for line in error.splitlines():
