@@ -21,6 +21,7 @@ DEFAULT_PARAMS = {
     'show_yticklabels': False,  # True to display y-tick labels
     'show_xticks': False,  # True to display x-tick numeric values
     'show_yticks': False,  # True to display y-tick numeric values
+    'show_titlefont': False, # True to display title fontname and size
     'show_barx': True,  # True to print the x-coordinates of all bars
     'show_linelabels': None,  # True to show line labels, default is True if there's a legend else False
     'sort_points': False,  # True to sort data by x then y.
@@ -282,6 +283,7 @@ class PlotChecker:
            can be used to specify x values at which the line should be sampled.
            If the data_type is lines, the x-tick labels are shown unless
            the show_xticklabels parameters is explicitly set to False.
+           title is a Text object, not a string.
         """
         if not self.params['line_info_only']:
             if self.params['show_xticklabels'] is None and data_type == 'bars':
@@ -289,7 +291,10 @@ class PlotChecker:
             has_legend = subplot.get_legend() is not None
             if has_legend and self.params['show_linelabels'] is None:
                 self.params['show_linelabels'] = True
-            print("Plot title: '{}'".format(title))
+            title_text = title.get_text()
+            print("Plot title: '{}'".format(title_text))
+            if self.params['show_titlefont']:
+                print(f"Title font: {title.get_fontsize()} pt {title.get_fontfamily()[0]}")
             self.print_axis_info(subplot)
 
         if data_type == 'points':
@@ -315,7 +320,7 @@ class PlotChecker:
                 if len(axes) > 1 and not self.params['line_info_only']:
                     print(f"Subplot {i}\n---------")
                 subplot = current_axes.axes
-                title = current_axes.title.get_text()
+                title = current_axes.title
                 self.print_subplot_info(data_type, subplot, title)
                 if len(axes) > 1 and not self.params['line_info_only']:
                     print(40 * "=")
