@@ -294,7 +294,11 @@ class PlotChecker:
             title_text = title.get_text()
             print("Plot title: '{}'".format(title_text))
             if self.params['show_titlefont']:
-                print(f"Title font: {title.get_fontsize()} pt {title.get_fontfamily()[0]}")
+                if self.params['show_colour']:
+                    colour = f' RGB{colors.to_rgb(title.get_color())}'
+                else:
+                    colour = ''
+                print(f"Title font: {title.get_fontsize()} pt {title.get_fontfamily()[0]}{colour}")
             self.print_axis_info(subplot)
 
         if data_type == 'points':
