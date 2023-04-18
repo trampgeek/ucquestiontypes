@@ -295,7 +295,7 @@ class PlotChecker:
             print("Plot title: '{}'".format(title_text))
             if self.params['show_titlefont']:
                 if self.params['show_colour']:
-                    colour = f' RGB{colors.to_rgb(title.get_color())}'
+                    colour = ' ' + self.normalise_colour(title.get_color())
                 else:
                     colour = ''
                 print(f"Title font: {title.get_fontsize()} pt {title.get_fontfamily()[0]}{colour}")
