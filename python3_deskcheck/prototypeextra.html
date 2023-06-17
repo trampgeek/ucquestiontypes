@@ -1,0 +1,294 @@
+{% if input_width is not defined %}
+{% set input_width = 60 %}
+{% endif %}
+{% if output_width is not defined %}
+{% set output_width = 0 %}
+{% set has_output = 0 %}
+{% else %}
+{% set has_output = 1 %}
+{% endif %}
+<style>
+
+table.sst {
+    border: none;
+}
+
+table.sst td, table.sst th {
+    border: 1px solid darkgray;
+    background-color: #d2d2e8;
+}
+
+table.sst input {
+    border: 1px solid gray;
+    margin: 5px;
+    font-family: monospace;
+}
+
+input.cr-variable, input.cr-variable-name {
+    width: {{ input_width }}px;
+}
+
+input.cr-linenumber {
+    width: 40px;
+}
+
+input.cr-undefined {
+    background-color: white;
+}
+
+input.cr-explicit {
+    background-color: #e2e5ff;
+}
+
+input.cr-filled-down {
+    background: repeating-linear-gradient(45deg,white,white 5px,#e2e5ff 5px,#e2e5ff 10px);
+}
+
+
+table.sst .cr-blank {
+    border-top: 0px;
+    border-bottom: 1px;
+    background-color: #f0f0f0;
+    width: 20px;
+    border-left: 2px solid black;
+    border-right: 2px solid black;
+}
+
+table.sst td.cr-step-col,
+table.sst th.cr-step-col {
+    background-color: inherit;
+    border: none;
+    border-right: 2px solid black;
+    padding: 0px 7px 0px 7px;
+}
+
+table.sst th {
+    font-weight: bold;
+    padding: 2px 5px 2px 5px;
+    text-align:center;
+    border: 2px solid black;
+}
+
+table.sst th.cr-variables-header {
+    font-weight: bold;
+    border-top: 2px solid black;
+    border-left: 2px solid black;
+    border-right: 2px solid black;
+    border-bottom: 1px solid black;
+}
+
+table.sst input.cr-variable-name {
+    font-weight: bold;
+}
+
+table.sst th.cr-linenumber-hdr,
+table.sst th.cr-output-hdr {
+    border-top: 2px solid black;
+    border-bottom: 2px solid black;
+}
+ 
+table.sst td.cr-bottom {
+    border-bottom: 2px solid black;
+}   
+
+table.sst td.cr-variable-name {
+    border-bottom: 2px solid black;
+}
+
+table.sst td.cr-dummy {
+    background-color: inherit;
+    border:none;
+}
+
+table.sst th.cr-variable-name {
+    bottom-bottom: 1px solid black;
+    font-weight: bold;  
+}
+
+input.cr-output {
+    width: {{ output_width }}px;
+    margin: 5px;
+}
+table.sst tr {
+    height:27px;
+}
+table.sst td {
+    height:27px;
+    text-align:center;
+}
+
+
+table.sst .cr-no-right-border {
+    border-right: none;
+}
+
+table.sst .cr-output-col {
+    border-right: 2px solid black;
+}
+
+table.sst .cr-linenumber-col {
+    border-right: 2px solid black;
+}
+</style>
+
+<div id="___textareaId___-desktop-ui">
+<table class="sst" style="border-collapse: collapse;" border="1">
+<thead>
+<tr>
+<td class="cr-dummy"></td>
+<td class="cr-dummy"></td>
+<th class="cr-variables-header" colspan="{{num_vars}}">Variables</th>
+{% if has_return %}
+<th class="cr-return-col">Return value</th>
+{% endif %}
+{% if has_output %}
+<td class="cr-blank cr-no-right-border"></td>
+<td class="cr-dummy"></td>
+{% endif %}
+</tr>
+
+<tr>
+<td class="cr-step-col"><strong>Step</strong></th>
+<th class="cr-linenumber-col cr-linenumber-hdr">Line number</th>
+{% for j in 1 .. num_vars %}
+<td class="cr-variable-col cr-variable-name"><input id="___textareaId___-cr-sst-var-0-{{j}}" class="coderunner-ui-element cr-variable-name" name="variable_name"></td>
+{% endfor %}
+{% if has_return %}
+<th class="cr-return-col">Return value</th>
+{% endif %}
+{% if has_output %}
+<th class="cr-blank"></th><th class="cr-output-col cr-output-hdr">Print output</th>
+{% endif %}
+</tr>
+</thead>
+
+<tbody>
+{% for i in 1..num_rows %}
+{% if i == num_rows %}
+{% set bottom = " cr-bottom" %}
+{% else %}
+{% set bottom = '' %}
+{% endif %}
+<tr>
+
+<td class="cr-step-col">{{i}}</td>
+<td class="cr-linenumber-col{{bottom}}"><input class="coderunner-ui-element cr-linenumber" name="line_number"></td>
+    {% for j in 1..num_vars %}
+<td class="cr-variable-col{{bottom}}"><input id="___textareaId___-cr-sst-var-{{i}}-{{j}}" class="coderunner-ui-element cr-variable cr-undefined" name="variable_value"></td>
+    {% endfor %}
+    {% if has_output %}
+<td class="cr-blank">
+</td><td class="cr-output-col{{bottom}}"><input class="coderunner-ui-element cr-output" name="output"></td>
+    {% endif %}
+</tr>
+{% endfor %}
+<input type="hidden" id="___textareaId___-cr-var-classes" class="coderunner-ui-element" value="{}" name="var_classes">
+</tbody>
+</table>
+
+</div>
+
+<script>
+(()=> {
+/*jshint esversion: 6 */
+function cr_varChanged(element, event) {
+    // Called on change event in a variable input element. 
+    // Sets values and classes of all elements in the column of
+    // the element by filling down any explicitly-entered
+    // elements until the next such element is encountered.
+    // Classes of the input elements in the column are set
+    // to 'cr-underfined', 'cr-filled-down' or 'cr-explicit'.
+    element.classList.remove('cr-filled-down', 'cr-undefined', 'cr-explicit');
+    const inputId = element.id;
+    const bits = inputId.split('-');
+    const colNum = parseInt(bits[bits.length - 1]);
+
+    const value = element.value.trim();
+    if (value === '') {
+        element.classList.add('cr-undefined');
+    } else {
+        element.classList.add('cr-explicit');
+    }
+
+    // Work down column from top to bottom, filling as appropriate.
+    let fillValue = '';
+    let varStates = document.getElementById("___textareaId___-cr-var-classes");
+    let allStates = varStates.value === '' ? {} : JSON.parse(varStates.value);
+    let rowNum = 1; // Start at top row.
+    while (1) {
+        let displayClass = 'cr-undefined';
+        bits[bits.length - 2] = rowNum.toString(); // Set the row number.
+        const inputId = bits.join('-');
+        const input = document.getElementById(inputId);
+        if (input === null) {
+            break;
+        }
+        if (input.classList.contains('cr-explicit')) {
+            fillValue = input.value;
+            displayClass = 'cr-explicit';
+        } else {
+            input.value = fillValue;
+            input.classList.remove('cr-filled-down', 'cr-undefined', 'cr-explicit');
+            if (fillValue === '') {
+                displayClass = 'cr-undefined';
+            } else {
+                displayClass = 'cr-filled-down';
+            }
+            input.classList.add(displayClass);
+        }
+        // Record display class of this input element if not undefined.
+        if (displayClass !== 'cr-undefined') {
+            allStates[`cr-sst-var-${rowNum}-${colNum}`] = displayClass;
+        }
+        rowNum += 1;
+    }
+    varStates.value = JSON.stringify(allStates);
+}
+
+// Called when the UI has been loaded and initialised to set the appropriate
+// display class. The initial state is undefined so only cr-explicit and
+// cr-filled-down are explicitly set.
+function loadClasses() {
+    const varStates = document.getElementById("___textareaId___-cr-var-classes");
+    const allStates = JSON.parse(varStates.value);
+    for(const key in allStates) {
+        const displayClass = allStates[key];
+        const id = `___textareaId___-${key}`;
+        const input = document.getElementById(id);
+        if (input === undefined) {
+            alert("Failed to find element with id " + id);
+        } else {
+            input.classList.remove('cr-undefined');
+            input.classList.add(displayClass);
+        }
+    } 
+}
+
+// Kill the enter key from submitting
+function kill_enter() {
+    const div = document.getElementById("___textareaId___-desktop-ui");
+    div.addEventListener("keydown", event=>{
+                if (event.keyCode === 13) {
+                    event.preventDefault();
+                }
+            });
+}
+
+// Set up a handler for each variable value (focusout or Enter key)
+function addVarChangedHandlers() {
+    const parentDiv = document.getElementById("___textareaId___-desktop-ui");
+    const elements = parentDiv.querySelectorAll(".cr-variable");
+    for (let i=0; i < elements.length; i++) {
+        const element = elements[i];
+        if (element.crEventSet === undefined || element.crEventSet === null) {
+            element.addEventListener("change", event=>cr_varChanged(element, event));
+            element.crEventSet = 1;
+        }
+    }
+}
+
+addVarChangedHandlers();
+loadClasses();
+kill_enter();
+})();
+</script>
