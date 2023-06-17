@@ -9,141 +9,111 @@
 {% endif %}
 <style>
 
+/* Table, th and td styles */
 table.sst {
     border: none;
+    border-collapse: collapse; 
+}
+
+table.sst tr {
+    height:27px;
 }
 
 table.sst td, table.sst th {
-    border: 1px solid darkgray;
     background-color: #d2d2e8;
+    text-align:center;
+    padding: 2px 5px 2px 5px;
 }
 
+table.sst td {
+    border: 1px solid #7e7e7e;
+}
+
+table.sst th {
+    font-weight: bold;
+    border: 2px solid black;
+}
+
+table.sst th.cr-variables-header {
+    border-bottom: 1px solid black;
+}
+
+table.sst .cr-step-col,
+table.sst .cr-blank {
+    background-color: inherit;
+    border: none;
+    padding: 0px 7px 0px 7px;
+}
+
+table.sst td.cr-bottom {
+    border-bottom: 2px solid black;
+}
+
+table.sst .cr-output-col,
+table.sst .cr-linenumber-col,
+table.sst .cr-return-row,
+table.sst td.cr-separator {
+    border-right: 2px solid black;
+    border-left: 2px solid black;
+}
+
+table.sst td.cr-last-col {
+    border-right: 2px solid black;
+}
+
+table.sst td.cr-variable-name {
+    border-bottom: 2px solid black;
+}
+
+/* Input styles */
 table.sst input {
     border: 1px solid gray;
     margin: 5px;
     font-family: monospace;
 }
 
-input.cr-variable, input.cr-variable-name {
+input.cr-output {
+    width: {{ output_width }}px;
+}
+
+table.sst input.cr-variable, input.cr-variable-name {
     width: {{ input_width }}px;
-}
-
-input.cr-linenumber {
-    width: 40px;
-}
-
-input.cr-undefined {
-    background-color: white;
-}
-
-input.cr-explicit {
-    background-color: #e2e5ff;
-}
-
-input.cr-filled-down {
-    background: repeating-linear-gradient(45deg,white,white 5px,#e2e5ff 5px,#e2e5ff 10px);
-}
-
-
-table.sst .cr-blank {
-    border-top: 0px;
-    border-bottom: 1px;
-    background-color: #f0f0f0;
-    width: 20px;
-    border-left: 2px solid black;
-    border-right: 2px solid black;
-}
-
-table.sst td.cr-step-col,
-table.sst th.cr-step-col {
-    background-color: inherit;
-    border: none;
-    border-right: 2px solid black;
-    padding: 0px 7px 0px 7px;
-}
-
-table.sst th {
-    font-weight: bold;
-    padding: 2px 5px 2px 5px;
-    text-align:center;
-    border: 2px solid black;
-}
-
-table.sst th.cr-variables-header {
-    font-weight: bold;
-    border-top: 2px solid black;
-    border-left: 2px solid black;
-    border-right: 2px solid black;
-    border-bottom: 1px solid black;
 }
 
 table.sst input.cr-variable-name {
     font-weight: bold;
 }
 
-table.sst th.cr-linenumber-hdr,
-table.sst th.cr-output-hdr {
-    border-top: 2px solid black;
-    border-bottom: 2px solid black;
-}
- 
-table.sst td.cr-bottom {
-    border-bottom: 2px solid black;
-}   
-
-table.sst td.cr-variable-name {
-    border-bottom: 2px solid black;
+table.sst input.cr-linenumber {
+    width: 40px;
 }
 
-table.sst td.cr-dummy {
-    background-color: inherit;
-    border:none;
+table.sst input.cr-return-value {
+    width: {{ return_width}}px;
 }
 
-table.sst th.cr-variable-name {
-    bottom-bottom: 1px solid black;
-    font-weight: bold;  
+table.sst input.cr-undefined {
+    background-color: white;
 }
 
-input.cr-output {
-    width: {{ output_width }}px;
-    margin: 5px;
-}
-table.sst tr {
-    height:27px;
-}
-table.sst td {
-    height:27px;
-    text-align:center;
+table.sst input.cr-explicit {
+    background-color: #e2e5ff;
 }
 
-
-table.sst .cr-no-right-border {
-    border-right: none;
+table.sst input.cr-filled-down {
+    background: repeating-linear-gradient(45deg,white,white 5px,#e2e5ff 5px,#e2e5ff 10px);
 }
 
-table.sst .cr-output-col {
-    border-right: 2px solid black;
-}
-
-table.sst .cr-linenumber-col {
-    border-right: 2px solid black;
-}
 </style>
 
 <div id="___textareaId___-desktop-ui">
-<table class="sst" style="border-collapse: collapse;" border="1">
+<table class="sst" border="1">
 <thead>
 <tr>
-<td class="cr-dummy"></td>
-<td class="cr-dummy"></td>
+<td class="cr-blank" colspan="2"></td>
 <th class="cr-variables-header" colspan="{{num_vars}}">Variables</th>
-{% if has_return %}
-<th class="cr-return-col">Return value</th>
-{% endif %}
 {% if has_output %}
-<td class="cr-blank cr-no-right-border"></td>
-<td class="cr-dummy"></td>
+<td class="cr-blank" colspan="2"></td>
 {% endif %}
 </tr>
 
@@ -151,19 +121,23 @@ table.sst .cr-linenumber-col {
 <td class="cr-step-col"><strong>Step</strong></th>
 <th class="cr-linenumber-col cr-linenumber-hdr">Line number</th>
 {% for j in 1 .. num_vars %}
-<td class="cr-variable-col cr-variable-name"><input id="___textareaId___-cr-sst-var-0-{{j}}" class="coderunner-ui-element cr-variable-name" name="variable_name"></td>
+    {% if j == num_vars %}
+    {% set last_col = ' cr-last-col' %}
+    {% else %}
+    {% set last_col = '' %}
+    {% endif %}
+<td class="cr-variable-col cr-variable-name{{last_col}}"><input id="___textareaId___-cr-sst-var-0-{{j}}" class="coderunner-ui-element cr-variable-name" name="variable_name"></td>
 {% endfor %}
-{% if has_return %}
-<th class="cr-return-col">Return value</th>
-{% endif %}
 {% if has_output %}
-<th class="cr-blank"></th><th class="cr-output-col cr-output-hdr">Print output</th>
+<td class="cr-blank cr-separator"></td>
+<th class="cr-output-col cr-output-hdr">Print output</th>
 {% endif %}
 </tr>
 </thead>
 
 <tbody>
 {% for i in 1..num_rows %}
+
 {% if i == num_rows %}
 {% set bottom = " cr-bottom" %}
 {% else %}
@@ -173,19 +147,33 @@ table.sst .cr-linenumber-col {
 
 <td class="cr-step-col">{{i}}</td>
 <td class="cr-linenumber-col{{bottom}}"><input class="coderunner-ui-element cr-linenumber" name="line_number"></td>
+{% if return_width and i == num_rows %}
+<td class="cr-return-row cr-bottom" colspan="{{num_vars}}"><strong>Return value:&nbsp;</strong>
+    <input class="coderunner-ui-element cr-return-value" name="return_value">
+</td>
+
+{% else %} 
     {% for j in 1..num_vars %}
-<td class="cr-variable-col{{bottom}}"><input id="___textareaId___-cr-sst-var-{{i}}-{{j}}" class="coderunner-ui-element cr-variable cr-undefined" name="variable_value"></td>
+       {% if j == num_vars %}
+          {% set last_col = ' cr-last-col' %}
+       {% else %}
+          {% set last_col = '' %}
+       {% endif %}
+<td class="cr-variable-col{{bottom}}{{last_col}}"><input id="___textareaId___-cr-sst-var-{{i}}-{{j}}" class="coderunner-ui-element cr-variable cr-undefined" name="variable_value"></td>
     {% endfor %}
     {% if has_output %}
-<td class="cr-blank">
+<td class="cr-blank cr-separator">
+        {% if return_width and i == num_rows - 1 %}
+        {% set bottom = " cr-bottom" %}
+        {% endif %}
 </td><td class="cr-output-col{{bottom}}"><input class="coderunner-ui-element cr-output" name="output"></td>
     {% endif %}
+{% endif %}
 </tr>
 {% endfor %}
-<input type="hidden" id="___textareaId___-cr-var-classes" class="coderunner-ui-element" value="{}" name="var_classes">
 </tbody>
 </table>
-
+<input type="hidden" id="___textareaId___-cr-var-classes" class="coderunner-ui-element" name="var_classes">
 </div>
 
 <script>
@@ -243,6 +231,9 @@ function cr_varChanged(element, event) {
         rowNum += 1;
     }
     varStates.value = JSON.stringify(allStates);
+    if (varStates.value == '{}') {
+        varStates.value = '';  // So HTML UI serialisation is empty.
+    }
 }
 
 // Called when the UI has been loaded and initialised to set the appropriate
@@ -264,7 +255,7 @@ function loadClasses() {
     } 
 }
 
-// Kill the enter key from submitting
+// Kill the enter key from submitting the form.
 function kill_enter() {
     const div = document.getElementById("___textareaId___-desktop-ui");
     div.addEventListener("keydown", event=>{
@@ -274,7 +265,7 @@ function kill_enter() {
             });
 }
 
-// Set up a handler for each variable value (focusout or Enter key)
+// Set up a handler for each variable value (change or Enter key)
 function addVarChangedHandlers() {
     const parentDiv = document.getElementById("___textareaId___-desktop-ui");
     const elements = parentDiv.querySelectorAll(".cr-variable");
@@ -282,6 +273,12 @@ function addVarChangedHandlers() {
         const element = elements[i];
         if (element.crEventSet === undefined || element.crEventSet === null) {
             element.addEventListener("change", event=>cr_varChanged(element, event));
+            element.addEventListener("keydown", event=>{
+                    if (event.keyCode === 13) { // Enter key
+                        cr_varChanged(element, event);
+                        event.preventDefault();
+                    }
+                });
             element.crEventSet = 1;
         }
     }
