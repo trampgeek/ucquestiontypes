@@ -21,7 +21,6 @@ DEFAULT_PARAMS = {
     'show_yticklabels': False,  # True to display y-tick labels
     'show_xticks': False,  # True to display x-tick numeric values
     'show_yticks': False,  # True to display y-tick numeric values
-    'show_titlefont': False, # True to display title fontname and size
     'show_barx': True,  # True to print the x-coordinates of all bars
     'show_linelabels': None,  # True to show line labels, default is True if there's a legend else False
     'sort_points': False,  # True to sort data by x then y.
@@ -68,17 +67,26 @@ class PlotChecker:
         if s.startswith('-') and float(s) == 0.0:
             s = s[1:]  # Strip off the minus sign.
         return s
-        
-    def fmt_float_axis(self, value, axis):
-        """Format a given value as a float with the appropriate number of
-           digits of precision for the specified axis ('x' or 'y').
-           Except - string values are returned as is.
+
+    def fmt_float_x(self, value):
+        """Return a formatted x-value using the precision specified for the x-axes,
+           except if value is a string, return it unchanged.
         """
         if isinstance(value, str):
             return value
         else:
-            precision = self.params['float_precision'][0 if axis == 'x' else 1]
-            return self.fmt_float(value, precision)
+            x_precision = self.params['float_precision'][0]
+            return self.fmt_float(value, x_precision)
+
+    def fmt_float_y(self, value):
+        """Return a formatted x-value using the precision specified for the y-axes,
+           except if value is a string, return it unchanged.
+        """
+        if isinstance(value, str):
+            return value
+        else:
+            x_precision = self.params['float_precision'][1]
+            return self.fmt_float(value, x_precision)
 
     def fmt_float_pair(self, p, precision=None):
         """A formatted (x, y) point or other pair of floating-point numbers.
@@ -102,14 +110,8 @@ class PlotChecker:
         """Print the info for the given line"""
         if self.params['show_colour']:
             print("Color:", self.normalise_colour(line.get_color()))
-        marker = str(line.get_marker())
-        if marker == 'None':
-            marker = ''  # Trying to achieve some form of consistency with linestyle here!
-        print("Marker:", marker)
-        linestyle = str(line.get_linestyle())
-        if linestyle == 'None':
-            linestyle = ''  # Hack to counter the Matplotlib hack!
-        print("Line style:", linestyle)
+        print("Marker:", line.get_marker())
+        print("Line style:", line.get_linestyle())
         label = line.get_label()
         if label and self.params['show_linelabels']:
             print("Label:", label)
@@ -205,61 +207,48 @@ class PlotChecker:
                 y = bar.get_height()
                 if self.params['show_barx']:
                     x = bar.get_xy()[0] + bar.get_width() / 2
-                    bar_spec = f"Bar{i}: x = {self.fmt_float_axis(x, 'x')}, height = {self.fmt_float_axis(y, 'y')}"
+                    bar_spec = f"Bar{i}: x = {self.fmt_float_x(x)}, height = {self.fmt_float_y(y)}"
                 else:
-                    bar_spec = f"Bar{i}: height = {self.fmt_float_axis(y, 'y')}"
+                    bar_spec = f"Bar{i}: height = {self.fmt_float_y(y)}"
                 print(bar_spec)
             except IndexError:
                 print(f"Bar{i} not found. Number of bars = {len(subplot.patches)}")
                 break
 
     def tick_label_text(self, labels):
-        """Return a string suitable for displaying tick labels (multiline or
-           single line depending on length.
-        """
+        """Return a string suitable for displaying tick labels"""
         label_text = ', '.join(labels)
         if len(label_text) > self.params['max_label_length']:
             label_text = '\n'.join(labels)
         return label_text
-    
-    def print_ticks_for_axis(self, axis, subplot, axis_limit):
-        """Print tick and ticklabel info for the given axis ('x' or 'y') of
-           the given subplot. axis_limit is either xlim or ylim.
-        """
-        axis = axis.lower()  # Just to be safe
-        if axis == 'x':
-            ticks = subplot.get_xticks()
-            tick_labels_obj = subplot.get_xticklabels()
-        else:
-            assert axis == 'y'
-            ticks = subplot.get_yticks()
-            tick_labels_obj = subplot.get_yticklabels()
-            
-        tick_labels = [label.get_text() for label in tick_labels_obj]
-            
-        if all(float(int(tick)) == tick for tick in ticks):
-            # If all ticks are integers, don't format as floats
-            formatted_ticks = [str(int(tick)) for tick in ticks]
-        else:
-            formatted_ticks = [self.fmt_float_axis(pos, axis) for pos in ticks]
-        
-        if self.params[f'show_{axis}ticks']:
-            print(f'{axis.upper()}-axis ticks at ', ', '.join(formatted_ticks))
-
-        if self.params[f'show_{axis}ticklabels']:
-            # A problem here is that in a call to bar(axis_labels, bar_heights) the call to get_xticklabels doesn't
-            # return the actual labels, but rather their tick locations. I can't find a workaround for this.
-            if all(label.strip() == '' for label in tick_labels):
-                tick_labels = formatted_ticks
-            tick_labels = self.in_range(tick_labels, axis_limit)
-            print(f'{axis.upper()}-axis tick labels:')
-            print(self.tick_label_text(tick_labels))        
-        
 
     def print_ticks(self, subplot, xlim, ylim):
         """Print tick and ticklabel info for the given subplot."""
-        self.print_ticks_for_axis('x', subplot, xlim)
-        self.print_ticks_for_axis('y', subplot, ylim)
+        if self.params['show_xticks']:
+            x_ticks = [self.fmt_float_x(pos) for pos in subplot.get_xticks()]
+            print('X-axis ticks at ', ', '.join(x_ticks))
+
+        if self.params['show_xticklabels']:
+            x_tick_labels = [label.get_text() for label in subplot.get_xticklabels()]
+            # A problem here is that in a call to bar(axis_labels, bar_heights) the call to get_xticklabels doesn't
+            # return the actual labels, but rather their tick locations. I can't find a workaround for this.
+            if all(label.strip() == '' for label in x_tick_labels):
+                x_tick_labels = [self.fmt_float_x(pos) for pos in subplot.get_xticks()]
+            x_tick_labels = self.in_range(x_tick_labels, xlim)
+            print('X-axis tick labels:')
+            print(self.tick_label_text(x_tick_labels))
+
+        if self.params['show_yticks']:
+            y_ticks = [self.fmt_float_y(pos) for pos in subplot.get_yticks()]
+            print('\nY-axis ticks at ', ', '.join(y_ticks))
+
+        if self.params['show_yticklabels']:
+            y_tick_labels = [label.get_text() for label in subplot.get_yticklabels()]
+            if all(label.strip() == '' for label in y_tick_labels):
+                y_tick_labels = [self.fmt_float_y(pos) for pos in subplot.get_yticks()]
+            y_tick_labels = self.in_range(y_tick_labels, ylim)
+            print("\nY-axis tick labels:")
+            print(self.tick_label_text(y_tick_labels))
 
     def print_axis_info(self, subplot):
         """Print the axis info for the given subplot"""
@@ -289,7 +278,6 @@ class PlotChecker:
            can be used to specify x values at which the line should be sampled.
            If the data_type is lines, the x-tick labels are shown unless
            the show_xticklabels parameters is explicitly set to False.
-           title is a Text object, not a string.
         """
         if not self.params['line_info_only']:
             if self.params['show_xticklabels'] is None and data_type == 'bars':
@@ -297,14 +285,7 @@ class PlotChecker:
             has_legend = subplot.get_legend() is not None
             if has_legend and self.params['show_linelabels'] is None:
                 self.params['show_linelabels'] = True
-            title_text = title.get_text()
-            print("Plot title: '{}'".format(title_text))
-            if self.params['show_titlefont']:
-                if self.params['show_colour']:
-                    colour = ' ' + self.normalise_colour(title.get_color())
-                else:
-                    colour = ''
-                print(f"Title font: {title.get_fontsize()} pt {title.get_fontfamily()[0]}{colour}")
+            print("Plot title: '{}'".format(title))
             self.print_axis_info(subplot)
 
         if data_type == 'points':
@@ -330,7 +311,7 @@ class PlotChecker:
                 if len(axes) > 1 and not self.params['line_info_only']:
                     print(f"Subplot {i}\n---------")
                 subplot = current_axes.axes
-                title = current_axes.title
+                title = current_axes.title.get_text()
                 self.print_subplot_info(data_type, subplot, title)
                 if len(axes) > 1 and not self.params['line_info_only']:
                     print(40 * "=")
