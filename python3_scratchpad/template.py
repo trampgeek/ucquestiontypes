@@ -57,7 +57,7 @@ KNOWN_PARAMS = {
     'prelude': '',
     'proscribedbuiltins': ['exec', 'eval'],
     'proscribedfunctions': [],
-    'proscribedconstructs': ["goto"],
+    'proscribedconstructs': ["goto", "while_with_else"],
     'proscribedsubstrings': [],
     'pylintoptions': [],
     'requiredconstructs': [],

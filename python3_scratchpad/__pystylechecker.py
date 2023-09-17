@@ -299,6 +299,8 @@ class StyleChecker:
                 self.generic_visit(node)
             def visit_While(self, node):
                 constructs_seen.add('while')
+                if node.orelse:
+                    constructs_seen.add('while_with_else')
                 self.generic_visit(node)
             def visit_Comprehension(self, node):
                 constructs_seen.add('comprehension')
@@ -451,7 +453,7 @@ class StyleChecker:
                 if node.col_offset == 0:
                     if len(node.targets) > 1 or isinstance(node.targets[0], ast.Tuple):
                         global_errors.append(f"Multiple targets in global assignment statement at line {node.lineno}")
-                    elif not node.targets[0].id.isupper():
+                    elif not (node.targets[0].id.isupper() or isinstance(node.value, ast.Lambda)):
                         global_errors.append(f"Global assignment statement at line {node.lineno}")
 
             def visit_For(self, node):
