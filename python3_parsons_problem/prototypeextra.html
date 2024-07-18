@@ -1,0 +1,741 @@
+<!--
+Code for use within the CodeRunner HTML UI to implement a Parsons
+Problem question type.
+
+Much of this code is derived from the jsparson project by Ihantola
+and Karavirta, licensed as below.
+
+-- Richard Lobb, August 2021.
+
+jsparsons licence:
+=================
+The MIT License
+
+Copyright (c) 2010- Petri Ihantola and Ville Karavirta
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+-->
+<style>
+    /** Stylesheet for the puzzles */
+    
+    .CR-parsons-authoring {
+        display: none;
+    }
+    
+    .CR-parsons-error {
+        display: none;
+        background-color:yellow;
+    }
+    
+    .source-code, target-code {
+        font-size: 90%;
+        font-family: monospace;
+        width: 100%;
+    }
+    
+    .target-code {
+        display: none;
+    }
+    
+    .sortable-code {
+        position: static;
+        padding-left: 0px;
+        margin-left: 2%;
+        float: left;
+        width: 94%;
+        max-width: {{ code_width}};
+    }
+    
+    
+    .sortable-code ul {
+        font-size: 90%;
+        font-family: monospace;
+        list-style: none;
+        background-color: #cbcff7;
+        padding-bottom: 20px;
+        padding-left: 0;
+        margin-left: 0;
+        border: 1px solid #efefff;;
+    }
+    .sortable-code ul:empty {
+      padding-bottom: 30px;
+    }
+    .sortable-code li, .sortable-code li:before, .sortable-code li:after {
+      box-sizing: content-box;
+    }
+    ul.output {
+        background-color: #FFA;
+    }
+    .sortable-code li {
+        -moz-border-radius:10px;
+        -webkit-border-radius:10px;
+        border-radius: 10px;
+        background-color: white;
+        border:1px solid lightgray;
+        padding:4px;
+        padding-left:8px;
+        margin-top: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        cursor: move;
+    }
+    .sortable-code li:hover {
+        overflow: visible;
+    }
+    
+    
+    </style>
+    <script>
+    var _tooltip = jQuery.fn.tooltip; // Cache this - see below.
+    </script>
+    <script>
+    /* jshint esversion: 6 */
+    //# sourceURL=ParsonsProbem.js
+    require(['jquery', 'jqueryui'], function($, jqui) {
+        jQuery.fn.tooltip = _tooltip;  // Replace tooltip, broken by jqueryui load
+    
+        function turn_on_touch() {
+            // Turn on touch functionality
+            // Detect touch support
+    
+            /*!
+            * jQuery UI Touch Punch 0.2.3
+            *
+            * Copyright 2011–2014, Dave Furfero
+            * Dual licensed under the MIT or GPL Version 2 licenses.
+            *
+            * Depends:
+            *  jquery.ui.widget.js
+            *  jquery.ui.mouse.js
+            */
+            $.support.touch = 'ontouchend' in document;
+    
+            // Ignore browsers without touch support
+            if (!$.support.touch) {
+                return;
+            }
+    
+          var mouseProto = $.ui.mouse.prototype,
+              _mouseInit = mouseProto._mouseInit,
+              _mouseDestroy = mouseProto._mouseDestroy,
+              touchHandled;
+    
+            /**
+            * Simulate a mouse event based on a corresponding touch event
+            * @param {Object} event A touch event
+            * @param {String} simulatedType The corresponding mouse event
+            */
+            function simulateMouseEvent (event, simulatedType) {
+    
+            // Ignore multi-touch events
+            if (event.originalEvent.touches.length > 1) {
+              return;
+            }
+    
+            event.preventDefault();
+    
+            var touch = event.originalEvent.changedTouches[0],
+                simulatedEvent = document.createEvent('MouseEvents');
+    
+            // Initialize the simulated mouse event using the touch event's coordinates
+            simulatedEvent.initMouseEvent(
+              simulatedType,    // type
+              true,             // bubbles
+              true,             // cancelable
+              window,           // view
+              1,                // detail
+              touch.screenX,    // screenX
+              touch.screenY,    // screenY
+              touch.clientX,    // clientX
+              touch.clientY,    // clientY
+              false,            // ctrlKey
+              false,            // altKey
+              false,            // shiftKey
+              false,            // metaKey
+              0,                // button
+              null              // relatedTarget
+            );
+    
+            // Dispatch the simulated event to the target element
+            event.target.dispatchEvent(simulatedEvent);
+            }
+    
+            /**
+            * Handle the jQuery UI widget's touchstart events
+            * @param {Object} event The widget element's touchstart event
+            */
+            mouseProto._touchStart = function (event) {
+    
+            var self = this;
+    
+            // Ignore the event if another widget is already being handled
+            if (touchHandled || !self._mouseCapture(event.originalEvent.changedTouches[0])) {
+              return;
+            }
+    
+            // Set the flag to prevent other widgets from inheriting the touch event
+            touchHandled = true;
+    
+            // Track movement to determine if interaction was a click
+            self._touchMoved = false;
+    
+            // Simulate the mouseover event
+            simulateMouseEvent(event, 'mouseover');
+    
+            // Simulate the mousemove event
+            simulateMouseEvent(event, 'mousemove');
+    
+            // Simulate the mousedown event
+            simulateMouseEvent(event, 'mousedown');
+            };
+    
+            /**
+            * Handle the jQuery UI widget's touchmove events
+            * @param {Object} event The document's touchmove event
+            */
+            mouseProto._touchMove = function (event) {
+    
+            // Ignore event if not handled
+            if (!touchHandled) {
+              return;
+            }
+    
+            // Interaction was not a click
+            this._touchMoved = true;
+    
+            // Simulate the mousemove event
+            simulateMouseEvent(event, 'mousemove');
+            };
+    
+            /**
+            * Handle the jQuery UI widget's touchend events
+            * @param {Object} event The document's touchend event
+            */
+            mouseProto._touchEnd = function (event) {
+    
+            // Ignore event if not handled
+            if (!touchHandled) {
+              return;
+            }
+    
+            // Simulate the mouseup event
+            simulateMouseEvent(event, 'mouseup');
+    
+            // Simulate the mouseout event
+            simulateMouseEvent(event, 'mouseout');
+    
+            // If the touch interaction did not move, it should trigger a click
+            if (!this._touchMoved) {
+    
+              // Simulate the click event
+              simulateMouseEvent(event, 'click');
+            }
+    
+            // Unset the flag to allow other widgets to inherit the touch event
+            touchHandled = false;
+          };
+    
+          /**
+           * A duck punch of the $.ui.mouse _mouseInit method to support touch events.
+           * This method extends the widget with bound touch event handlers that
+           * translate touch events to mouse events and pass them to the widget's
+           * original mouse event handling methods.
+           */
+          mouseProto._mouseInit = function () {
+    
+            var self = this;
+    
+            // Delegate the touch handlers to the widget's element
+            self.element.bind({
+              touchstart: $.proxy(self, '_touchStart'),
+              touchmove: $.proxy(self, '_touchMove'),
+              touchend: $.proxy(self, '_touchEnd')
+            });
+    
+            // Call the original $.ui.mouse init method
+            _mouseInit.call(self);
+          };
+    
+          /**
+           * Remove the touch event handlers
+           */
+          mouseProto._mouseDestroy = function () {
+    
+            var self = this;
+    
+            // Delegate the touch handlers to the widget's element
+            self.element.unbind({
+              touchstart: $.proxy(self, '_touchStart'),
+              touchmove: $.proxy(self, '_touchMove'),
+              touchend: $.proxy(self, '_touchEnd')
+            });
+    
+            // Call the original $.ui.mouse destroy method
+            _mouseDestroy.call(self);
+          };
+        }
+    
+        turn_on_touch(); // Run the jquery ui touch code.
+    
+        // =====================================================
+        //
+        // Now the code based on jsparsons (see licence at top)
+        // ----------------------------------------------------
+        // =====================================================
+    
+        var MAX_INDENT = 7;
+    
+        // regexp used for trimming
+        var trimRegexp = /^\s*(.*?)\s*$/;
+        var translations = {
+            en: {
+                source_panel_label: 'Drag from here.',
+                target_panel_label: 'Construct solution here.',
+            }
+        };
+    
+        // =================================================================
+        //
+        // ParsonsCodeLine object definition
+        // ---------------------------------
+        //
+        // Defines a line object skeleton with only code and indentation from
+        // a code string of the problem definition string (see parseCode)
+        // =================================================================
+        var ParsonsCodeLine = function(codestring, widget, allow_indent) {
+            this.widget = widget;
+            this.code = "";
+            this.indent = 0;
+            if (codestring) {
+                // Consecutive lines to be dragged as a single block of code have strings "\\n" to
+                // represent newlines => replace them with actual new line characters "\n"
+                this.code = codestring.replace(/#distractor\s*$/, "").replace(trimRegexp, "$1").replace(/\\n/g, "\n");
+                if (allow_indent) {
+                    this.indent = (codestring.length - codestring.replace(/^\s+/, "").length) / 4;
+                    this.indent = Math.min(this.indent, MAX_INDENT);
+                }
+                this.id = widget.id_prefix + ParsonsCodeLine.next_id++;
+            }
+        };
+    
+        ParsonsCodeLine.next_id = 0; // Effectively a static variable of the 'class'.
+    
+    
+        // =================================================================
+        //
+        // ParsonsWidget object definition
+        // -------------------------------
+        // Creates a parsons widget.
+        // Init must be called after creating an object.
+        //
+        // ==================================================================
+        var ParsonsWidget = function(options) {
+            var defaults = {
+                'incorrectSound': false,
+                'x_indent': 35,
+                'feedback_cb': false,
+                'lang': 'en'
+            };
+    
+            this.options = jQuery.extend({}, defaults, options);
+            this.id_prefix = options.targetDivId + 'codeline';
+            if (translations.hasOwnProperty(this.options.lang)) {
+                this.translations = translations[this.options.lang];
+            } else {
+                this.translations = translations['en'];
+            }
+    
+            // translate panel_labels
+            if (!this.options.hasOwnProperty("source_panel_label")) {
+                this.options.source_panel_label = this.translations.source_panel_label;
+            }
+            if (!this.options.hasOwnProperty("target_panel_label")) {
+                this.options.target_panel_label = this.translations.target_panel_label;
+            }
+        };
+    
+        // Parse a problem definition given as a string and returns
+        // a list of ParsonCodeLines.
+        ParsonsWidget.prototype.parseCode = function(lines, allow_indent) {
+            var lineList = [],
+                lineObject,
+                that = this;
+            // Create line objects out of each codeline.
+            // Fields in line objects:
+            //   code: a string of the code, may include newline characters and
+            //     thus in fact represents a block of consecutive lines
+            //   indent: indentation level.
+            $.each(lines, function(index, item) {
+                lineObject = new ParsonsCodeLine(item, that, allow_indent);
+                // Initialize line object with code and indentation properties
+                if (lineObject.code.length > 0) {
+                    // The line is non-empty, not just whitespace
+                    lineList.push(lineObject);
+                }
+            });
+    
+            return lineList;
+        };
+    
+        ParsonsWidget.prototype.loadFromTa = function(fromTaId, toDivId, panelLabel) {
+            // Load the div element with the given toDivId with a sortable UL
+            // element of code lines from text area with the given ID (fromTaId).
+            // Can't use jQuery to get element directly as it can't parse
+            // the element ID properly due to ___textareaId___ macro.
+            const fromTa = document.getElementById(fromTaId);
+            const code = fromTa.value;
+            const lines = this.parseCode(code.split("\n"), true);
+            const html = '<p>' + panelLabel + '</p>' +
+                this.codeLinesToHTML(lines, toDivId);
+            const toElement = document.getElementById(toDivId);
+            $(toElement).html(html);
+        };
+    
+        ParsonsWidget.prototype.init = function(sourceTaId, targetTaId) {
+            // Set up the widget, given the IDs of the textareas containing the
+            // source and target code to be displayed.
+            this.loadFromTa(sourceTaId, this.options.sourceDivId, this.options.source_panel_label);
+            this.loadFromTa(targetTaId, this.options.targetDivId, this.options.target_panel_label);
+            this.manageDrags();
+        };
+    
+    
+        ParsonsWidget.prototype.calcIndent = function(leftDiff) {
+            // Return the indent based on the pixel difference given.
+            return Math.max(0, Math.round(leftDiff / this.options.x_indent));
+        };
+    
+        ParsonsWidget.prototype.getCodeString = function(ulElement) {
+            // Extract and return the code from the given UL element.
+            // as a single string.
+            var codeLines = ulElement.childNodes;
+            var code = "";
+            codeLines.forEach(item => {
+                var line = item.innerText.trim();
+                var indent = parseInt(item.style.marginLeft, 10);
+                indent = indent / this.options.x_indent;
+                var newLine = " ".repeat(indent * 4) + line + '\n';
+                code += newLine;
+            });
+            return code;
+        };
+    
+        ParsonsWidget.prototype.displayError = function(message) {
+            if (this.options.incorrectSound && $.sound) {
+                $.sound.play(this.options.incorrectSound);
+            }
+            alert(message);
+        };
+    
+        ParsonsWidget.prototype.setHTMLIndent = function(codelineID, indent) {
+            var codeLine = $(document.getElementById(codelineID));
+            codeLine.css("margin-left", this.cssIndent(indent));
+        };
+    
+        ParsonsWidget.prototype.cssIndent = function(indent) {
+            return this.options.x_indent * Math.min(MAX_INDENT, indent) + "px";
+        };
+    
+        ParsonsWidget.prototype.codeLineToHTML = function(codeline) {
+            var style = codeline.indent ? ' style="margin-left:' + this.cssIndent(codeline.indent) + '" ' : '';
+            return '<li id="' + codeline.id + '" class="ace-static-highlight lang-py"' + style + '>' + codeline.code + '<\/li>';
+        };
+    
+        ParsonsWidget.prototype.codeLinesToHTML = function(codeLines, destinationID) {
+            // Construct and return a single <ul> element with the HTML
+            // for the given list of lines as embedded LI elements. The UL
+            // element's ID is destinationID.
+            var lineHTML = [];
+            codeLines.forEach(line => {
+                lineHTML.push(this.codeLineToHTML(line));
+            });
+            return '<ul id="ul-' + destinationID + '">' + lineHTML.join('') + '</ul>';
+        };
+    
+        ParsonsWidget.prototype.manageDrags = function() {
+            // Set up both the source and target panes as sortable UI elements
+            // with drag management between panes and for indentation (target only.)
+            // An annoying issue here is that
+            // the ___textareaId___ macro produces IDs that jQuery cannot
+            // handle, so we have to use getElementById everywhere.
+            let that = this;
+            let targetElement = document.getElementById('ul-' + this.options.targetDivId);
+            let target = $(targetElement).sortable({
+                start: function(event, ui) { },
+                stop: function(event, ui) {
+                    if ($(event.target)[0] !== ui.item.parent()[0]) {
+                        return;
+                    }
+                    // The helper isn't where it seems to be because of the margin!
+                    var currentMargin = parseInt(ui.item.css('margin-left'));
+                    var realPosition = currentMargin + ui.position.left - ui.item.parent().position().left;
+                    var indent = that.calcIndent(realPosition);
+                    that.setHTMLIndent(ui.item[0].id, indent);
+                },
+                receive: function(event, ui) {
+                    var currentMargin = parseInt(ui.item.css('margin-left'));
+                    var realPosition = currentMargin + ui.position.left - ui.item.parent().position().left;
+                    var indent = that.calcIndent(realPosition);
+                    that.setHTMLIndent(ui.item[0].id, indent);
+                },
+                grid: [this.options.x_indent, 1]
+            });
+    
+            target.addClass("output");
+    
+            let sourceElement = document.getElementById('ul-' + this.options.sourceDivId);
+            let source = $(sourceElement).sortable({
+                connectWith: target,
+                start: function() { },
+                receive: function(event, ui) {
+                    that.setHTMLIndent(ui.item[0].id, 0);
+                },
+                stop: function(event, ui) {}
+            });
+    
+            target.sortable('option', 'connectWith', source);
+        };
+    
+        window.ParsonsWidget = ParsonsWidget;
+    
+        function shuffleArray(array) {
+            for (var i = array.length - 1; i > 0; i--) {
+                var j = Math.floor(Math.random() * (i + 1));
+                var temp = array[i];
+                array[i] = array[j];
+                array[j] = temp;
+            }
+        }
+    
+        // Check that the target (aka answer) textarea contains only lines
+        // that are present in the source textarea. Turns on the error
+        // message (yellow highlighted) if not.
+        // Also rebuilds the source field for the answer to contain all unused
+        // lines in the target.
+        // Works only in the question authoring context.
+        function checkAnswer() {
+            const sourceTa = document.getElementById('CR-parsons-source-ta-id_answerpreload');
+            const targetTa = document.getElementById('CR-parsons-target-ta-id_answer');
+            const answerUnused = document.getElementById('CR-parsons-source-ta-id_answer');
+            const errorPara = document.getElementById('CR-parsons-answer-error-id_answer');
+            const sourceCode = sourceTa.value.trim();
+            const sourceLines = sourceCode.split("\n");
+            const answerLines = targetTa.value.trim().split("\n");
+    
+            errorPara.style.display = 'none';
+            let used = [];
+            for (let i=0; i < answerLines.length; i++) {
+                let found = false;
+                for (let j=0; j < sourceLines.length; j++) {
+                    if (used.includes(j)) continue;
+                    if (sourceLines[j].trim() === answerLines[i].trim()) {
+                        used.push(j);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    errorPara.style.display = 'inline';
+                }
+            }
+    
+            answerUnused.value = '';
+            for(let i=0; i < sourceLines.length; i++) {
+                if (!used.includes(i)) {
+                    answerUnused.value += sourceLines[i] + "\n";
+                }
+            }
+        }
+    
+        function setupMutationObservers(sourceTextArea, targetTextArea, sourceDivId, targetDivId, parson) {
+            // In the live question we monitor changes in the source or drop zone
+            // and update the corresponding CodeRunner textareas when anything changes.
+            const sortables = document.getElementById("CR-parsons-sortables-___textareaId___");
+            const sourceUl = document.getElementById('ul-' + sourceDivId);
+            const targetUl = document.getElementById('ul-' + targetDivId);
+    
+            function syncToCoderunner() {
+                sourceTextArea.value = parson.getCodeString(sourceUl);
+                targetTextArea.value = parson.getCodeString(targetUl);
+            }
+    
+            const observer = new MutationObserver(syncToCoderunner);
+            const observerOptions = {
+                childList: true,
+                attributes: true,
+                characterData: false,
+                subtree: true,
+                attributeFilter: ['style'],
+                attributeOldValue: false,
+                characterDataOldValue: false
+            };
+            observer.observe(sortables, observerOptions);
+            if (window.ace && window.applyAceHighlighting) {
+                window.applyAceHighlighting(window.ace, sourceUl);
+                window.applyAceHighlighting(window.ace, targetUl);
+            }
+        }
+    
+        function setupAuthoring(sourceTextArea, targetTextArea) {
+            // In the question authoring page we disable the drag-and-drop zones
+            // and instead display the textareas containing the available code
+            // lines and the required answer in the answer preload and preload
+            // sections respectively. Buttons are available to shuffle and deindent
+            // in the answer preload section.
+    
+            $(".sortable-code").hide();
+    
+            const isPreload = $(sourceTextArea).closest('.preloadanswer').length > 0;
+            if (isPreload) {
+                // In the answer preload the source TA plus shuffle and unindent are visible.
+                // The target TA must be cleared.
+                const preloadAuthoring = document.getElementById("CR-parsons-preload-authoring-div-___textareaId___");
+                preloadAuthoring.style.display = "block";
+                targetTextArea.value = '';
+    
+                // Set up event handlers for the button and for changes to the source.
+                const shuffle = document.getElementById("CR-parsons-shuffle-___textareaId___");
+                shuffle.onclick = function () {
+                    let code = sourceTextArea.value.trim();
+                    let lines = code.split('\n');
+                    shuffleArray(lines);
+                    sourceTextArea.value = lines.join('\n');
+                };
+    
+                const unindent = document.getElementById("CR-unindent-___textareaId___");
+                unindent.onclick = function () {
+                    let code = sourceTextArea.value.trim();
+                    let lines = code.split('\n');
+                    for (var i=0; i < lines.length; i++) {
+                        lines[i] = lines[i].trim();
+                    }
+                    sourceTextArea.value = lines.join('\n');
+                };
+                sourceTextArea.oninput = checkAnswer;
+    
+            } else {
+                // In the answer area, only the target TA is visible. The
+                // source TA must contain all the lines unused by the answer.
+                // This is (re)calculated by the checkAnswer function whenever the
+                // preload source TA or the answer target TA is edited.
+                const answerAuthoring = document.getElementById("CR-parsons-answer-authoring-div-___textareaId___");
+                answerAuthoring.style.display = "block";
+                targetTextArea.oninput = checkAnswer;
+            }
+            checkAnswer();
+        }
+    
+    
+        function doAceHighlighting(parentQuestionDiv) {
+            if (window.ace) {
+                const highlight = window.ace.require("ace/ext/static_highlight");
+                const codeElements = parentQuestionDiv.getElementsByClassName('ace-static-highlight');
+    
+                for (let i = 0; i < codeElements.length; i++) {
+                    let element = codeElements[i];
+    
+                    const mode = "ace/mode/python";
+                    if (element.hasAttribute("lang")) {
+                        mode = "ace/mode/" + element.getAttribute("lang");
+                    }
+    
+    
+    
+                    highlight(element, {
+                        mode: mode,
+                        showGutter: false,
+                    }, function(highlighted) {
+                            const fontSize = "14px";
+                            if (element.hasAttribute("font-size")) {
+                                fontSize = element.getAttribute("font-size");
+                            }
+                            // The class ace_static_highlight (with underscores)
+                            // is not to be confused with ace-static-highlight.
+                            // The latter is generated by the Ace highlighter.
+                            element.getElementsByClassName('ace_static_highlight')[0].style['font-size'] = fontSize;
+                    });
+                }
+            }
+        }
+    
+        function startUp() {
+            const sourceDivId = 'CR-parsons-source-div-___textareaId___';
+            const targetDivId = 'CR-parsons-target-div-___textareaId___';
+            const sourceTaId = 'CR-parsons-source-ta-___textareaId___';
+            const targetTaId = 'CR-parsons-target-ta-___textareaId___';
+            const sourceTextArea = document.getElementById(sourceTaId);
+            const targetTextArea = document.getElementById(targetTaId);
+            const parentQuestions = $(sourceTextArea).closest(".que");
+            const isQuestion = parentQuestions.length > 0;
+    
+            const parson = new ParsonsWidget({
+                'sourceDivId': sourceDivId,
+                'targetDivId' : targetDivId
+            });
+            parson.init(sourceTaId, targetTaId);
+    
+            if (!isQuestion) {
+                // If this is not an actual question, set up the appropriate authoring panel.
+                setupAuthoring(sourceTextArea, targetTextArea);
+            }
+            setupMutationObservers(sourceTextArea, targetTextArea, sourceDivId, targetDivId, parson);
+            doAceHighlighting(parentQuestions[0]);
+    
+        }
+    
+        $(document).ready(startUp);
+    });
+    </script>
+    
+    <html>
+        <head>
+            <title>Simple js-parsons example</title>
+        </head>
+        <body>
+            <div id="CR-parsons-answer-authoring-div-___textareaId___" class="CR-parsons-authoring">
+            <h4>Answer:</h4>
+            <p id="CR-parsons-answer-error-___textareaId___" class="CR-parsons-error">
+    The answer contains line(s) not available in the preload!
+            </p>
+    <textarea id="CR-parsons-target-ta-___textareaId___" name='CR-parsons-target' class="coderunner-ui-element" rows="8">
+    </textarea>
+            </div>
+    
+            <div id="CR-parsons-preload-authoring-div-___textareaId___" class="CR-parsons-authoring">
+                <h4>Drag-able code lines:</h4>
+    <textarea id="CR-parsons-source-ta-___textareaId___" name='CR-parsons-source' class="coderunner-ui-element CR-parsons-answer-edit" rows="8">
+    </textarea>
+    
+                <div id="CR-parsons-button-div-___textareaId___">
+                    <button id="CR-parsons-shuffle-___textareaId___" type="button">Shuffle</button>
+                    <button id="CR-unindent-___textareaId___" type="button">Remove indentation</button>
+                </div>
+    
+            </div>
+    
+            <div id="CR-parsons-sortables-___textareaId___">
+                <div id="CR-parsons-source-div-___textareaId___" class="sortable-code">
+                </div>
+                <div id="CR-parsons-target-div-___textareaId___" class="sortable-code">
+                </div>
+                    <div style="clear:both;">
+                    </div>
+            </div>
+        </body>
+    </html>

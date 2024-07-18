@@ -10,6 +10,7 @@
 <style>
 div.sst-ui {
     padding: 10px;
+    overflow: scroll;
 }
 
 /* Table, th and td styles */
@@ -129,11 +130,11 @@ table.sst input.cr-filled-down {
     {% else %}
     {% set last_col = '' %}
     {% endif %}
-<td class="cr-variable-col cr-variable-name{{last_col}}"><input id="___textareaId___-cr-sst-var-0-{{j}}" class="coderunner-ui-element cr-variable-name" name="variable_name"></td>
+<td class="cr-variable-col cr-variable-name{{last_col}}"><input id="___textareaId___-cr-sst-var-0-{{j}}" class="coderunner-ui-element cr-variable-name" autocapitalize="none" name="variable_name"></td>
 {% endfor %}
 {% if has_output %}
 <td class="cr-blank cr-separator"></td>
-<th class="cr-output-col cr-output-hdr">Print output</th>
+<th class="cr-output-col cr-output-hdr">Printed output</th>
 {% endif %}
 </tr>
 </thead>
@@ -152,7 +153,7 @@ table.sst input.cr-filled-down {
 <td class="cr-linenumber-col{{bottom}}"><input class="coderunner-ui-element cr-linenumber" name="line_number"></td>
 {% if return_width and i == num_rows %}
 <td class="cr-return-row cr-bottom" colspan="{{num_vars}}"><strong>Return value:&nbsp;</strong>
-    <input class="coderunner-ui-element cr-return-value" name="return_value">
+    <input class="coderunner-ui-element cr-return-value" name="return_value" autocapitalize="none">
 </td>
 
 {% else %} 
@@ -162,14 +163,14 @@ table.sst input.cr-filled-down {
        {% else %}
           {% set last_col = '' %}
        {% endif %}
-<td class="cr-variable-col{{bottom}}{{last_col}}"><input id="___textareaId___-cr-sst-var-{{i}}-{{j}}" class="coderunner-ui-element cr-variable cr-undefined" name="variable_value"></td>
+<td class="cr-variable-col{{bottom}}{{last_col}}"><input id="___textareaId___-cr-sst-var-{{i}}-{{j}}" class="coderunner-ui-element cr-variable cr-undefined" name="variable_value" autocapitalize="none"></td>
     {% endfor %}
     {% if has_output %}
 <td class="cr-blank cr-separator">
         {% if return_width and i == num_rows - 1 %}
         {% set bottom = " cr-bottom" %}
         {% endif %}
-</td><td class="cr-output-col{{bottom}}"><input class="coderunner-ui-element cr-output" name="output"></td>
+</td><td class="cr-output-col{{bottom}}"><input class="coderunner-ui-element cr-output" name="output" autocapitalize="none"></td>
     {% endif %}
 {% endif %}
 </tr>
@@ -243,33 +244,32 @@ function cr_varChanged(element, event) {
 // display class. The initial state is undefined so only cr-explicit and
 // cr-filled-down are explicitly set.
 function loadClasses() {
-    const varStates = document.getElementById("___textareaId___-cr-var-classes");
-    const allStates = JSON.parse(varStates.value);
-    for(const key in allStates) {
-        const displayClass = allStates[key];
-        const id = `___textareaId___-${key}`;
-        const input = document.getElementById(id);
-        if (input === undefined) {
-            alert("Failed to find element with id " + id);
-        } else {
-            input.classList.remove('cr-undefined');
-            input.classList.add(displayClass);
+    const varClasses = document.getElementById("___textareaId___-cr-var-classes");
+    const varStates = varClasses.value;
+    if (varStates) {
+        const allStates = JSON.parse(varStates);
+        for(const key in allStates) {
+            const displayClass = allStates[key];
+            const id = `___textareaId___-${key}`;
+            const input = document.getElementById(id);
+            if (input === undefined) {
+                alert("Failed to find element with id " + id);
+            } else {
+                input.classList.remove('cr-undefined');
+                input.classList.add(displayClass);
+            }
         }
     } 
 }
 
-// Kill the enter key from submitting the form. 
-// Catches Enter key used in the variable name or output fields.
+// Kill the enter key from submitting the form.
 function kill_enter() {
     const div = document.getElementById("___textareaId___-sst-ui-div");
-    const elements = div.querySelectorAll(".cr-variable-name,.cr-output");
-    for (let i=0; i < elements.length; i++) {
-        elements[i].addEventListener("keydown", event=> {
+    div.addEventListener("keydown", event=> {
                 if (event.keyCode === 13) {
                     event.preventDefault();
                 }
-            });
-    }
+    });
 }
 
 // Set up a handler for each variable value (change or Enter key)
@@ -292,7 +292,8 @@ function addVarChangedHandlers() {
 }
 
 addVarChangedHandlers();
-loadClasses();
 kill_enter();
+loadClasses();
+
 })();
 </script>

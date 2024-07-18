@@ -102,14 +102,11 @@ class PlotChecker:
         """Print the info for the given line"""
         if self.params['show_colour']:
             print("Color:", self.normalise_colour(line.get_color()))
-        marker = str(line.get_marker())
-        if marker == 'None':
-            marker = ''  # Trying to achieve some form of consistency with linestyle here!
+        marker = line.get_marker()
+        if marker == '':
+            marker = None
         print("Marker:", marker)
-        linestyle = str(line.get_linestyle())
-        if linestyle == 'None':
-            linestyle = ''  # Hack to counter the Matplotlib hack!
-        print("Line style:", linestyle)
+        print("Line style:", line.get_linestyle())
         label = line.get_label()
         if label and self.params['show_linelabels']:
             print("Label:", label)

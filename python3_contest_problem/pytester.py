@@ -8,6 +8,7 @@ import __pytask as pytask
 import re
 from __tester import Tester
 from __pystylechecker import StyleChecker
+from random import randint
 
 
 class PyTester(Tester):
@@ -77,6 +78,13 @@ class PyTester(Tester):
         """
         prog = self.params['STUDENT_ANSWER'].lstrip()
         return prog.startswith('"') or prog.startswith("'")
+    
+
+    def tweaked_warning(self, message):
+        """Improve the warning message by updating line numbers and replacing <string>: with Line
+        """
+        return self.adjust_error_line_nums(message).replace('<string>:', 'Line ')
+    
 
     def style_errors(self):
         """Return a list of all the style errors. Start with local tests and continue with pylint
@@ -90,10 +98,16 @@ class PyTester(Tester):
                 errors += [str(e)]
             else:
                 check_for_passive = (self.params['warnifpassiveoutput'] and self.params['isfunction'])
-                if check_for_passive and self.passive_output():
-                    errors.append("Your code was not expected to generate any output " +
-                        "when executed stand-alone.\nDid you accidentally include " +
-                        "your test code?")
+                if check_for_passive:
+                    passive = self.passive_output()
+                    warning_messages = [line for line in passive.splitlines() if 'Warning:' in line]
+                    if warning_messages:
+                        errors += [self.tweaked_warning(message) for message in warning_messages]
+                    elif passive:
+                        errors.append("Your code was not expected to generate any output " +
+                                      "when executed stand-alone.\nDid you accidentally include " +
+                                      "your test code?\nOr you might have a wrong import statement - have you tested in Wing?")
+                        errors.append(passive)
 
         if len(errors) == 0 or self.params.get('forcepylint', False):
             # Run precheckers (pylint, mypy)
@@ -114,10 +128,16 @@ class PyTester(Tester):
     def prerun_hook(self):
         """A hook for subclasses to do initial setup or code hacks etc
            Returns a list of errors, to which other errors are appended.
-           In this class we use it to perform required hacks to disable
-           calls to main. If the call to main_hacks fails, assume the code
-           is bad and will get flagged by pylint in due course.
+           In this class we use it firstly to check that the number of Prechecks
+           allowed has not been exceeded and then, of not, to perform
+           required hacks to disable calls to main. If the call to main_hacks
+           fails, assume the code is bad and will get flagged by pylint in due course.
         """
+        step_info = self.params['STEP_INFO']
+        max_prechecks = self.params.get('maxprechecks', None)
+        if max_prechecks and step_info['numprechecks'] >= max_prechecks:
+            return [f"Sorry, you have reached the limit on allowed prechecks ({max_prechecks}) for this question."]
+        
         try:
             return self.main_hacks()
         except:
@@ -132,9 +152,12 @@ class PyTester(Tester):
             code += '\n'.join([
                 'figs = _mpl.pyplot.get_fignums()',
                 'if figs:',
-                '    print(f"{len(figs)} figures found")'
+                '    print(f"{len(figs)} figures found")',
+                '    print(f"{_mpl.pyplot.get_figlabels()}")'
             ]) + '\n'
         task = pytask.PyTask(self.params, code)
+        with open(f"WTF{randint(0,100)}.py", 'w') as outfile:
+            outfile.write(code)
         task.compile()
         captured_output, captured_error = task.run_code()
         return (captured_output + '\n' + captured_error).strip()
@@ -198,6 +221,7 @@ class PyTester(Tester):
                 (r'(.*: *)(\d+)(, *\d+:.*\(.*\).*)', [2]),
                 (r'(.*:)(\d+)(:\d+: [A-Z]\d+: .*line )(\d+)(.*)', [2, 4]),
                 (r'(.*:)(\d+)(:\d+: [A-Z]\d+: .*)', [2]),
+                (r'(.*:)(\d+)(: [a-zA-Z]*Warning.*)', [2]),
         ]
         output_lines = []
         for line in error.splitlines():

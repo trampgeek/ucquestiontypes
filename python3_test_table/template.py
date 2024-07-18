@@ -17,10 +17,10 @@ STANDARD_PYLINT_OPTIONS = ['--disable=trailing-whitespace,superfluous-parens,' +
                       'singleton-comparison,unused-variable,chained-comparison,no-else-break,' + 
 	                  'consider-using-in,useless-object-inheritance,unnecessary-pass,' + 
 	                  'reimported,wrong-import-order,wrong-import-position,ungrouped-imports,' + 
-                      'consider-using-set-comprehension,no-else-raise,unnecessary-lambda-assignment,' + 
+                      'consider-using-set-comprehension,no-else-raise,' + 
                       'unspecified-encoding,use-dict-literal,,consider-using-with,' + 
                       'duplicate-string-formatting-argument,consider-using-dict-items,' + 
-                      'consider-using-max-builtin,use-a-generator,unidiomatic-typecheck', 
+                      'consider-using-max-builtin,use-a-generator ', 
                       '--good-names=i,j,k,n,s,c,_' 
                       ] 
 
@@ -46,7 +46,6 @@ KNOWN_PARAMS = {
     'maxfunctionlength': 30,
     'maxnumconstants': 4,
     'maxoutputbytes': 10000,
-    'maxprechecks': None,
     'maxstringlength': 2000,
     'norun': False,
     'nostylechecks': False,
@@ -59,7 +58,6 @@ KNOWN_PARAMS = {
     'proscribedconstructs': ["goto"],
     'proscribedsubstrings': [],
     'pylintoptions': [],
-    'pylintmatplotlib': False,
     'requiredconstructs': [],
     'requiredfunctiondefinitions': [],
     'requiredfunctioncalls': [],
@@ -78,11 +76,8 @@ KNOWN_PARAMS = {
         'importlib': {
             'onlyallow': []  
         },
-        'fileinput': {
-            'onlyallow': []  
-        },
         'os': {
-            'disallow': ['system', '_exit', '_.*', 'open', 'fdopen', 'listdir']
+            'disallow': ['system', '_exit', '_.*']
         },
         'subprocess': {
             'onlyallow': []
@@ -98,6 +93,7 @@ KNOWN_PARAMS = {
     'stripmain': False,
     'stripmainifpresent': False,
     'testisbash': False,
+    'testre': '',
     'timeout': 5,
     'totaltimeout': 50,
     'suppresspassiveoutput': False,
@@ -146,12 +142,6 @@ def process_template_params():
         else:
             PARAMS[param_name] = default;
 
-    result_columns = """{{QUESTION.resultcolumns}}""".strip();
-    if result_columns == '':
-        PARAMS['resultcolumns'] = [['Test', 'testcode'], ['Input', 'stdin'], ['Expected', 'expected'], ['Got', 'got']]
-    else:
-        PARAMS['resultcolumns'] = json.loads(result_columns);
-    
     if PARAMS['extra'] == 'stdin':
         PARAMS['stdinfromextra'] = True
     if PARAMS['runextra']:
@@ -162,10 +152,7 @@ def process_template_params():
     if PARAMS['allowglobals']:
         PARAMS['pylintoptions'].append("--const-rgx='[a-zA-Z_][a-zA-Z0-9_]{2,30}$'")
     if PARAMS['usesmatplotlib']:
-        if PARAMS['pylintmatplotlib']:
-            PARAMS['pylintoptions'].append("--disable=reimported,wrong-import-position,wrong-import-order,unused-import")
-        else:
-            PARAMS['precheckers'] = []
+        PARAMS['pylintoptions'].append("--disable=reimported,wrong-import-position,wrong-import-order,unused-import")
     if PARAMS['testisbash']:
         print("testisbash is not implemented for Python")
 
@@ -176,33 +163,93 @@ def get_test_cases():
     return test_cases
 
 
-def scrambled(answer):
-    """Return a randomly reordered version of the given answer"""
-    if answer.strip() == '':
-        return ''
-    docstrings = re.findall(r'""".*?"""', answer) + re.findall(r"'''.*?'''", answer)
-    rest = re.sub(r'""".*?"""', '', answer)
-    rest2 = re.sub(r"'''.*?'''", '', rest)
-    lines = [line.strip() for line in (rest2.splitlines() + docstrings) if line.strip()]
-    original = lines[:]
-    while len(lines) > 1 and original == lines: # Make sure the order changes!
-        random.shuffle(lines)
-    return '\n'.join(lines)
+def get_tests_from_example_table():
+    """Return a list of Test objects build from the Example table for this question type"""
+    num_rows = len(PARAMS['EXAMPLE_TESTS'])
+    tests = []
+    for i in range(num_rows):
+        testcode = PARAMS['EXAMPLE_TESTS'][i]
+        result = PARAMS['EXAMPLE_EXPECTEDS'][i]
+        test = TestCase({
+            'testcode': testcode,
+            'stdin': '',
+            'expected': result,
+            'extra': '',
+            'display': 'show',
+            'hiderestiffail': False,
+            'useasexample': True,
+            'mark': 1.0
+        })
+        tests.append(test)
+    return tests
+
+
+def build_new_outcome(outcome):
+    """Replace the testresults table with customised prologuehtml that
+       contains a table more appropriate to this question type.
+    """
+    GREYS = ['#f0f0f0', '#e0e0e0']
+    IS_CORRECT_COL = 4
     
+    def style(colour, padding=5, border='border:1px solid darkgray', extrastyle=''):
+        """The style to use for a cell"""
+        return f'style="background-color:{colour};padding:{padding}px;{border};{extrastyle};"'
+        
+    locked = get_readonly_cells()
+    html = '<table class="table table-bordered" style="width:auto">\n'
+    html += f'<tr><th {style(GREYS[0])}>Test</th><th {style(GREYS[0])}>Result</th><th {style(GREYS[0])}>Valid test?</th>'
+    for i, row in enumerate(outcome['testresults'][1:]):
+        is_correct = row[IS_CORRECT_COL]
+        html += '<tr>'
+        
+        # Extract the testcode and expected from the result table.
+        # Colour the cells according to whether they were user-editable and
+        # if so according to whether the test was labelled correct or not.
+        for result_table_col, test_table_col in [(1, 0), (2, 1)]:
+            row_colour = colour = GREYS[(i + 1) % 2]
+            if (i, test_table_col) not in locked and not is_correct: 
+                # If this is a cell allowing user entry and test is wrong
+                colour = '#fcc'  # Red
+            html += f'<td {style(colour)}"><pre {style(colour, 0, "")}>{row[result_table_col]}</pre></td>'
+        if is_correct:
+            html += f'<td {style(row_colour, extrastyle="text-align:center")}><span style="color: green;">✔</span></td>\n'
+        else:
+            html += f'<td {style(row_colour, extrastyle="text-align:center")}><span style="font-size: 16pt; color: red;">✘</span></td>\n'
+        
+    html += '</table>\n'
+    outcome['epiloguehtml'] = html
+    del outcome['testresults']
+    return outcome
+
+
 def get_answer():
     """Return the sample answer"""
     answer_json = """{{QUESTION.answer | e('py')}}""".strip()
     try:
-        answer = json.loads(answer_json)['answer_code'][0]
+        answer = json.loads(answer_json)['main_answer_code'][0]
     except:
         answer = answer_json  # Assume this is the original solution
     return answer
+    
+    
+def get_readonly_cells():
+    """Return a list of the readonly cells"""
+    preload = json.loads("""{{QUESTION.answerpreload | e('py')}}""".strip())
+    cells = []
+    for cell_label in json.loads(preload['cr_readonly_cells'][0]).keys():
+        mat = re.match(r'cell-(\d+)-(\d+)', cell_label)
+        cells.append((int(mat[1]), int(mat[2])))  # (row, column)
+    return cells
+    
     
 def process_global_params():
     """Plug into the PARAMS variable all the "global" parameters from
        the question and its answer (as distinct from the template parameters).
     """
-    PARAMS['STUDENT_ANSWER'] = """{{ STUDENT_ANSWER | e('py') }}""".rstrip() + '\n'
+    response = json.loads("""{{ STUDENT_ANSWER | e('py') }}""")
+    PARAMS['STUDENT_ANSWER'] = response['main_answer_code'][0].rstrip() + '\n'
+    PARAMS['EXAMPLE_TESTS'] = response['test_table_col0']
+    PARAMS['EXAMPLE_EXPECTEDS'] = response['test_table_col1']
     PARAMS['SEPARATOR'] = "#<ab@17943918#@>#"
     PARAMS['IS_PRECHECK'] = "{{ IS_PRECHECK }}" == "1"
     PARAMS['QUESTION_PRECHECK'] = {{ QUESTION.precheck }} # Type of precheck: 0 = None, 1 = Empty etc
@@ -216,8 +263,6 @@ def process_global_params():
         else:
             with open("__author_solution.html") as file:
                 PARAMS['AUTHOR_ANSWER'] = (file.read().strip() % html.escape(answer))
-        with open("__author_solution_scrambled.html") as file:
-            PARAMS['AUTHOR_ANSWER_SCRAMBLED'] = (file.read().strip() % html.escape(scrambled(answer))) + "\n"
     else:
         PARAMS['AUTHOR_ANSWER'] = PARAMS['AUTHOR_ANSWER_SCRAMBLED'] = ''
 
@@ -244,12 +289,8 @@ def update_test_cases(test_cases, outcome):
     return test_cases
 
 
-def get_expecteds_from_answer(params, test_cases):
-    """Run all tests using the sample answer rather than the student answer.
-       Fill in the expected field of each test case using the sample answer and return
-       the updated test case list.
-       Return None if the sample answer gave any sort of runtime error
-    """
+def run_tests(params, test_cases):
+    """Run all tests using the sample answer rather than the student answer"""
     new_params = {key: value for key, value in params.items()}
     new_params['IS_PRECHECK'] = False
     new_params['nostylechecks'] = True
@@ -257,6 +298,16 @@ def get_expecteds_from_answer(params, test_cases):
     new_params['running_sample_answer'] = True
     tester = PyTester(new_params, test_cases)
     outcome = tester.test_code()
+    return outcome
+    
+    
+def get_expecteds_from_answer(params, test_cases):
+    """Run all tests using the sample answer rather than the student answer.
+       Fill in the expected field of each test case using the sample answer and return
+       the updated test case list.
+       Return None if the sample answer gave any sort of runtime error
+    """
+    outcome = run_tests(params, test_cases)
     if 'prologuehtml' in outcome:
         outcome['prologuehtml'] = "<h2>ERROR IN QUESTION'S SAMPLE ANSWER. PLEASE REPORT</h2>\n" + outcome['prologuehtml']
         return outcome, None
@@ -264,28 +315,46 @@ def get_expecteds_from_answer(params, test_cases):
         return outcome, update_test_cases(test_cases, outcome)
 
 
+ok = True
 process_template_params()
 test_cases = get_test_cases()
 process_global_params()
+example_tests = get_tests_from_example_table()
 
-if PARAMS['useanswerfortests']:
-    outcome, test_cases = get_expecteds_from_answer(PARAMS, test_cases)
+outcome = {'fraction': 1.0}
 
-if test_cases:
-    tester = PyTester(PARAMS, test_cases)
-    outcome = tester.test_code()
-    feedback = ''
-    parsons_threshold = float('inf') if PARAMS['parsonsproblemthreshold'] is None else PARAMS['parsonsproblemthreshold']
-    if outcome['fraction'] != 1 and not PARAMS['IS_PRECHECK'] and PARAMS['STEP_INFO']['numchecks'] + 1 >= parsons_threshold:
-        feedback = PARAMS['AUTHOR_ANSWER_SCRAMBLED']
-    elif outcome['fraction'] == 1 and PARAMS['showfeedbackwhenright'] and not (PARAMS['IS_PRECHECK']):
-        outcome['prologuehtml'] = '<pre class="ace-highlight-code" style="display:none"></pre>'  # Kick filter into life
-        feedback = PARAMS['AUTHOR_ANSWER']
-    if feedback:
-        if 'epiloguehtml' in outcome:
-            if outcome['epiloguehtml'].strip():
-                outcome['epiloguehtml'] += '<br>'
-        else:
-            outcome['epiloguehtml'] = ''
-        outcome['epiloguehtml'] += f'<div style="background-color: #f4f4f4">{feedback}</div>'
+if PARAMS['testre']:
+    # Check all tests to see if they contain the desired regular expression
+    bad_tests = []
+    for test in example_tests:
+        code = test.testcode
+        if not re.search(PARAMS['testre'], code, re.DOTALL):
+            bad_tests.append(code)
+    if bad_tests:
+        test_is = 'test is' if len(bad_tests) == 1 else 'tests are'
+        outcome['fraction'] = 0.0
+        outcome['prologuehtml'] = f"""<p>Sorry but the following {test_is} not in the required form.
+Please re-read the question to see what was expected. Ask a tutor if you're still unsure.
+<ul>"""
+        for code in bad_tests:
+            outcome['prologuehtml'] += f'<li><pre>{code}</pre></li>\n'
+        outcome['prologuehtml'] += '</ol>'
+        ok = False
+    
+if not PARAMS['IS_PRECHECK'] and ok:
+    # Check the Example table cases with the so-called sample answer
+    #print("Running example tests")
+    
+    outcome = run_tests(PARAMS, example_tests)
+    outcome = build_new_outcome(outcome)
+    if 'prologuehtml' in outcome:
+        outcome['prologuehtml'] = "<h2>ERROR IN QUESTION'S HIDDEN TESTING CODE. PLEASE REPORT</h2>\n" + outcome['prologuehtml']
+        ok = False
+    elif outcome['fraction'] == 1.0:
+        outcome['prologuehtml'] = '<h4>All good!</h4>'
+    else:
+        outcome['prologuehtml'] = """<b>One or more of your tests is invalid.</b>
+<br>The erroneous cells are shaded red in the result table."""
+        ok = False
+    
 print(json.dumps(outcome))

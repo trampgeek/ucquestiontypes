@@ -103,14 +103,15 @@ class CodeTrap(object):
         # (mct63) Insure print always prints to the redirected stdout and not actual stdout.
         # (rjl83) Also keep track of print quantity and raise ExcessiveOutput if too much is generated.
         def new_print(*values, sep=' ', end='\n', file=None, flush=False):
+            string_values = []
             for value in values:
-                try:
-                    CodeTrap.output_chars += len(str(value))
-                except:
-                    pass
+                strvalue = str(value)
+                string_values.append(strvalue)
+                CodeTrap.output_chars += len(strvalue)
+
             if CodeTrap.output_chars > self.params['maxoutputbytes']:
                 raise ExcessiveOutput()
-            return print(*values, sep=sep, end=end, file=sys.stdout)
+            return print(*string_values, sep=sep, end=end, file=sys.stdout)
             
         # force 'input' to echo to stdin to stdout
         if self.params['echostandardinput']:
