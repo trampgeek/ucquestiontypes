@@ -29,7 +29,6 @@ class ResultTable:
             'stdinfromextra': False,
             'strictwhitespace': True,
             'floattolerance': None,
-            'resulttablecolumns': ['Test', 'Input', 'Expected', 'Got'],
             'ALL_OR_NOTHING': True
         }
         for param, value in default_params.items():
@@ -42,10 +41,9 @@ class ResultTable:
            and set flags to indicate presence or absence
            of various table columns.
         """
-        columns = self.params['resulttablecolumns']
         header = ['iscorrect']
         self.column_formats = ['%s']
-        if 'Test' in columns and any(test.testcode.strip() != '' for test in testcases):
+        if any(test.testcode.strip() != '' for test in testcases):
             header.append("Test")
             self.has_tests = True
             # If the test code should be rendered in html then set that as column format.
@@ -55,16 +53,12 @@ class ResultTable:
                 self.column_formats.append('%s')
 
         stdins = [test.extra if self.params['stdinfromextra'] else test.stdin for test in testcases]
-        if 'Input' in columns and any(stdin.rstrip() != '' for stdin in stdins):
+        if any(stdin.rstrip() != '' for stdin in stdins):
             header.append('Input')
             self.column_formats.append('%s')
             self.has_stdins = True
-        for col in ['Expected', 'Got']:
-            if col in columns:
-                header.append(col)
-                self.column_formats.append('%s')
-        header += ['iscorrect', 'ishidden']
-        self.column_formats += ['%s', '%s']
+        header += ['Expected', 'Got', 'iscorrect', 'ishidden']
+        self.column_formats += ['%s', '%s', '%s', '%s']
         self.table = [header]
 
     def image_column_nums(self):
@@ -118,20 +112,18 @@ class ResultTable:
 
     def add_row(self, testcase, result, error=''):
         """Add a result row to the table for the given test and result"""
-        columns = self.params['resulttablecolumns']
         is_correct = self.check_correctness(result + error, testcase.expected)
         row = [is_correct]
-        if 'Test' in columns and self.has_tests:
+        if self.has_tests:
             if getattr(testcase, 'test_code_html', None):
                 row.append(testcase.test_code_html)
             else:
                 row.append(testcase.testcode)
-        if 'Input' in columns and self.has_stdins:
+        if self.has_stdins:
             row.append(testcase.extra if self.params['stdinfromextra'] else testcase.stdin)
-        if 'Expected' in columns:
-            row.append(testcase.expected.rstrip())
+        row.append(testcase.expected.rstrip())
         max_len = self.params.get('maxstringlength', MAX_STRING_LENGTH)
-        result = sanitise(result.rstrip('\n'), max_len)
+        result = sanitise(result.strip('\n'), max_len)
 
         if error:
             error_message = '*** RUN TIME ERROR(S) ***\n' + sanitise(error, max_len)
@@ -139,8 +131,7 @@ class ResultTable:
                 result = result + '\n' + error_message
             else:
                 result = error_message
-        if 'Got' in columns:
-            row.append(result)
+        row.append(result)
 
         if is_correct:
             self.mark += testcase.mark
@@ -227,8 +218,8 @@ class ResultTable:
            pattern and the floating-point bits will be matched to within the
            given absolute tolerance.
         """
-        expected_lines = expected.rstrip().splitlines()
-        got_lines = got.rstrip().splitlines()
+        expected_lines = expected.strip().splitlines()
+        got_lines = got.strip().splitlines()
         if len(got_lines) != len(expected_lines):
             return False
         else:

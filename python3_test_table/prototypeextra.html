@@ -1,5 +1,5 @@
 <script>
-    if (document.getElementsByClassName('qtype-coderunner-scratchpad-plus').length === 0) {
+    if (document.getElementsByClassName('qtype-coderunner-test-table').length === 0) {
         const styleElement = document.createElement('style');
         styleElement.textContent = `
 div.cr-test-table-wrapper {
@@ -10,7 +10,7 @@ div.cr-test-table-div {
     padding: 10px;
 }
 table.cr-test-table {
-    max-width: 680px;
+    max-width: 800px;
 }
 td.cr-test-table-cell {
     padding: 2px;
@@ -35,7 +35,7 @@ tr.cr-test-table-row {
     width: 50px;
 }
 `;
-        styleElement.classList.add('qtype-coderunner-scratchpad-plus');
+        styleElement.classList.add('qtype-coderunner-test-table');
         document.head.append(styleElement);
     }
 </script>
@@ -116,18 +116,20 @@ tr.cr-test-table-row {
 
     /**
      * When a table cell is changed within the question edit form,
-     * recompute all readonly cells, namely any non-empty cell.
+     * recompute all readonly cells, namely any non-empty cell that
+     * do not contain a triple question mark.
+     * Parameter is the relevant value of 'this'.
      */
-    TestTableBuilder.prototype.setReadonlys = function () {
-        this.readonlys = {};
-        const cells = this.outerDiv.getElementsByClassName('cr-input-element');
+    TestTableBuilder.prototype.setReadonlys = function (t) {
+        t.readonlys = {};
+        const cells = t.outerDiv.getElementsByClassName('cr-input-element');
         for (let i = 0; i < cells.length; i++) {
-            if (cells[i].value) {
+            if (cells[i].value && cells[i].value.indexOf('???') === -1) {
                 //alert("Non empty " + cells[i].ident + ", value = " + cells[i].value + "'");
-                this.readonlys[cells[i].ident] = 1;
+                t.readonlys[cells[i].ident] = 1;
             }
         }
-        this.hiddenReadOnlys.value = JSON.stringify(this.readonlys);
+        t.hiddenReadOnlys.value = JSON.stringify(t.readonlys);
     }
 
 
@@ -164,7 +166,8 @@ tr.cr-test-table-row {
             if (!this.isLiveQuestion) {
                 // When cell values change in the question edit form, the IDs of all
                 // non-empty input elements are recorded as readOnly when in live mode.
-                inputElement.oninput = () => this.setReadonlys();
+                const t = this;
+                inputElement.oninput = () => this.setReadonlys(t);
             }
 
             td.appendChild(inputElement);
@@ -263,13 +266,10 @@ tr.cr-test-table-row {
 
         const addButton = make_button('Add row');
         addButton.onclick = function (event) {
+            const numRows = t.tableDiv.querySelectorAll('table tbody tr').length;
             const lastRow = t.tableDiv.querySelector('table tbody tr:last-child');
-            const newRow = lastRow.cloneNode(true);  // Copy the last row of the table.
-            const cells = newRow.querySelectorAll('.cr-test-table-cell');
-            for (var i = 0; i < cells.length; i++) {
-                cells[i].firstChild.value = ''; // Clear all contents from the cloned row.
-            };
-            lastRow.after(newRow);
+            const newLastRow = t.tableRow(numRows);
+            lastRow.insertAdjacentElement('afterend', newLastRow);
             event.target.previousElementSibling.disabled = false; // Enable delete button.
         };
         controlPanelDiv.appendChild(addButton);

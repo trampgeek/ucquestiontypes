@@ -182,13 +182,6 @@ class StyleChecker:
                                     name in restricted[import_name].get('disallow', [])):
                                 errors.append("Your program should not import '{}' from '{}'.".format(name, import_name))
 
-        if 'maxreturndepth' in self.params and (max_depth := self.params['maxreturndepth']) is not None:
-            bad_returns = self.find_nested_returns(max_depth)
-            if bad_returns:
-                if max_depth == 1:
-                    errors.append("This question does not allow return statements within loops, if statements etc")
-                else:
-                    errors.append(f"This question does not allow return statements to be indented more than '{max_depth}' levels")
         return errors
 
     def find_all_imports(self):
@@ -280,48 +273,6 @@ class StyleChecker:
         visitor = FuncFinder()
         visitor.visit(self.tree)
         return defined
-    
-
-    def nested_returns(self):
-        """Return a dictionary in which the keys are nesting depth (0, 1, 2, ..9) and the
-           values are counts of the number of return statements at that level. Nesting
-           level is deemed to increase with def, if, for, while, try, except and with
-           statements.
-        """
-        counts = {i: 0 for i in range(10)}
-        depth = 0
-        class ReturnFinder(ast.NodeVisitor):
-            def visit_body(self, node):
-                nonlocal depth
-                depth += 1
-                self.generic_visit(node)
-                depth -= 1
-            def visit_For(self, node):
-                self.visit_body(node)
-            def visit_While(self, node):
-                self.visit_body(node)
-            def visit_FunctionDef(self, node):
-                self.visit_body(node)
-            def visit_If(self, node):
-                self.visit_body(node)
-            def visit_Try(self, node):
-                self.visit_body(node)
-            def visit_TryExcept(self, node):
-                self.visit_body(node)
-            def visit_TryFinally(self, node):
-                self.visit_body(node)
-            def visit_ExceptHandler(self, node):
-                self.visit_body(node)
-            def visit_With(self, node):
-                self.visit_body(node)
-            def visit_Return(self, node):
-                nonlocal depth
-                counts[depth] += 1
-                self.generic_visit(node)
-
-        visitor = ReturnFinder()
-        visitor.visit(self.tree)
-        return counts
 
 
     def constructs_used(self):
@@ -550,11 +501,3 @@ class StyleChecker:
         visitor = MyVisitor()
         visitor.visit(self.tree)
         return bad_funcs
-    
-
-    def find_nested_returns(self, max_depth):
-        """Return a count of the number of return statements
-           at a nesting depth in excess of max_depth.
-        """
-        returns = self.nested_returns()
-        return sum(returns[depth] for depth in range(max_depth + 1, 10))

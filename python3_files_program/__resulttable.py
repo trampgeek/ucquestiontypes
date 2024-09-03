@@ -5,7 +5,9 @@
 """
 import html
 import re
+import base64
 from collections import defaultdict
+from urllib.parse import quote
 
 MAX_STRING_LENGTH = 4000  # 4k is default maximum string length
 
@@ -14,13 +16,17 @@ class ResultTable:
     def __init__(self, params):
         self.params = params
         self.mark = 0
+        self.max_mark = 0
         self.table = None
         self.failed_hidden = False
         self.aborted = False
         self.has_stdins = False
         self.has_tests = False
+        self.has_extra = False
+        self.has_expected = False
         self.hiding = False
         self.num_failed_tests = 0
+        self.num_failed_hidden_tests = 0
         self.missing_tests = 0
         self.global_error = ''
         self.column_formats = None
@@ -29,7 +35,6 @@ class ResultTable:
             'stdinfromextra': False,
             'strictwhitespace': True,
             'floattolerance': None,
-            'resulttablecolumns': ['Test', 'Input', 'Expected', 'Got'],
             'ALL_OR_NOTHING': True
         }
         for param, value in default_params.items():
@@ -42,11 +47,11 @@ class ResultTable:
            and set flags to indicate presence or absence
            of various table columns.
         """
-        columns = self.params['resulttablecolumns']
         header = ['iscorrect']
+        required_columns = {field: hdr for hdr, field in self.params['resultcolumns']}
         self.column_formats = ['%s']
-        if 'Test' in columns and any(test.testcode.strip() != '' for test in testcases):
-            header.append("Test")
+        if 'testcode' in required_columns and any(test.testcode.strip() != '' for test in testcases):
+            header.append(required_columns['testcode'])
             self.has_tests = True
             # If the test code should be rendered in html then set that as column format.
             if any(getattr(test, 'test_code_html', None) for test in testcases):
@@ -55,16 +60,26 @@ class ResultTable:
                 self.column_formats.append('%s')
 
         stdins = [test.extra if self.params['stdinfromextra'] else test.stdin for test in testcases]
-        if 'Input' in columns and any(stdin.rstrip() != '' for stdin in stdins):
-            header.append('Input')
+        if 'stdin' in required_columns and any(stdin.rstrip() != '' for stdin in stdins):
+            header.append(required_columns['stdin'])
             self.column_formats.append('%s')
             self.has_stdins = True
-        for col in ['Expected', 'Got']:
-            if col in columns:
-                header.append(col)
-                self.column_formats.append('%s')
-        header += ['iscorrect', 'ishidden']
-        self.column_formats += ['%s', '%s']
+
+        if 'extra' in required_columns:
+            header.append(required_columns['extra'])
+            self.column_formats.append('%h')  # See format_extra
+            self.has_extra = True
+    
+        if 'expected' in required_columns:
+            header.append(required_columns['expected'])
+            self.column_formats.append('%s')
+            self.has_expected = True
+
+        # Always include the got column, regardless of required_columns,
+        # as it can contain error messages,
+
+        header += ['Got', 'iscorrect', 'ishidden']
+        self.column_formats += ['%s', '%s', '%s']
         self.table = [header]
 
     def image_column_nums(self):
@@ -115,21 +130,44 @@ class ResultTable:
     def record_global_error(self, error_message):
         """Record some sort of global failure"""
         self.global_error = error_message
+  
+    def format_extra(self, extra, filename):
+        """Format the extra field (which should be the contents of a file). If 
+           the longest line exceeds filedownloadwidth or the number of lines
+           exceeds filedownloadlines the file is converted into a data URI.
+           Otherwise it's returned as is.
+        """
+        assert self.params['extra'] == 'files'
+        lines = extra.splitlines()
+        too_wide = len(lines) > 0 and (max(len(line) for line in lines) > self.params['filedownloadwidth'])
+        too_high = len(lines) > self.params['filedownloadlines']
+        if too_wide or too_high:
+            quoted = quote(extra)
+            link = f'<a href="data:text/plain;charset=utf-8,{quoted}" download={filename}><span style="color:blue;font-weight:bold;text-decoration: underline;">Download</span></a>'
+            return link
+        return '<pre>' + extra + '</pre>'
 
     def add_row(self, testcase, result, error=''):
         """Add a result row to the table for the given test and result"""
-        columns = self.params['resulttablecolumns']
         is_correct = self.check_correctness(result + error, testcase.expected)
         row = [is_correct]
-        if 'Test' in columns and self.has_tests:
+        if self.has_tests:
             if getattr(testcase, 'test_code_html', None):
                 row.append(testcase.test_code_html)
             else:
                 row.append(testcase.testcode)
-        if 'Input' in columns and self.has_stdins:
+
+        if self.has_stdins:
             row.append(testcase.extra if self.params['stdinfromextra'] else testcase.stdin)
-        if 'Expected' in columns:
+
+        if self.has_extra:
+            filename = testcase.stdin.splitlines()[0]
+            row.append(self.format_extra(testcase.extra, filename))
+            
+        if self.has_expected:
             row.append(testcase.expected.rstrip())
+
+        # Always include the result column as it may contain error messages.
         max_len = self.params.get('maxstringlength', MAX_STRING_LENGTH)
         result = sanitise(result.rstrip('\n'), max_len)
 
@@ -139,15 +177,18 @@ class ResultTable:
                 result = result + '\n' + error_message
             else:
                 result = error_message
-        if 'Got' in columns:
-            row.append(result)
+        row.append(result)
 
+        display = testcase.display.upper()
+        self.max_mark += testcase.mark
         if is_correct:
             self.mark += testcase.mark
         else:
             self.num_failed_tests += 1
+            if display == 'HIDE':
+                self.num_failed_hidden_tests += 1
         row.append(is_correct)
-        display = testcase.display.upper()
+
         is_hidden = (
             self.hiding or
             display == 'HIDE' or
@@ -164,7 +205,16 @@ class ResultTable:
             self.aborted = True
 
     def get_mark(self):
-        return self.mark if self.num_failed_tests == 0 or not self.params['ALL_OR_NOTHING'] else 0
+        if self.num_failed_tests == 0:
+            return self.mark
+        # Failed one or more tests
+        elif (self.num_failed_tests == self.num_failed_hidden_tests) and self.params['failhiddenonlyfract'] > 0:
+            return self.max_mark * self.params['failhiddenonlyfract']
+        elif not self.params['ALL_OR_NOTHING']:
+            return self.mark
+        else:
+            return 0
+ 
 
     @staticmethod
     def htmlise(s):

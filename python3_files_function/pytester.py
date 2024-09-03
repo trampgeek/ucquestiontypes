@@ -25,12 +25,14 @@ class PyTester(Tester):
         # If the extra field is set to files, the first line of stdin must be filenames.
         # Create all required files.
         if params['extra'] == 'files':
-            for test in testcases:
-                filename = test.stdin.splitlines()[0].strip()
-                if filename == '':
-                    raise Exception('The first line of stdin must be the filename')
-                with open(filename, 'w') as outfile:
-                    outfile.write(test.extra)
+            if not params['IS_PRECHECK']:
+                for test in testcases:
+                    filename = test.stdin.splitlines()[0].strip()
+                    if filename == '':
+                        raise Exception('The first line of stdin must be the filename')
+                    if filename not in params['protectedfiles']:
+                        with open(filename, 'w') as outfile:
+                            outfile.write(test.extra)
         else:
             raise Exception("extra should be 'files' for this question type!")
 
@@ -83,6 +85,7 @@ class PyTester(Tester):
             self.prelude_length += 1
             self.params['pylintoptions'].append("--disable=W0105")
         self.style_checker = StyleChecker(self.prelude, self.params['STUDENT_ANSWER'], self.params)
+
 
     def has_docstring(self):
         """True if the student answer has a docstring, which means that,
@@ -257,7 +260,7 @@ class PyTester(Tester):
         """Return a simplified version of a pylint error with Line <n> inserted in
            lieu of __source.py:<n><p>: Xnnnn
         """
-        pattern = r'__source.py:(\d+): *\d+: *[A-Z]\d+: (.*)'
+        pattern = f'__source.py:(\d+): *\d+: *[A-Z]\d+: (.*)'
         match = re.match(pattern, error)
         if match:
             return f"Line {match.group(1)}: {match.group(2)}"
@@ -278,7 +281,7 @@ class PyTester(Tester):
                 for (line, depth) in main_calls:
                     if depth == 0:
                         main_call = student_lines[line]
-                        if not re.match(r' *main\(\)', main_call):
+                        if not re.match(' *main\(\)', main_call):
                             errors.append(f"Illegal call to main().\n" +
                                 "main should not take any parameters and should not return anything.")
                         else:

@@ -252,7 +252,7 @@ class Tester:
         return []
 
     def get_all_images_html(self):
-        r"""Search the current directory for images named _image.*(Expected|Got)(\d+).png.
+        """Search the current directory for images named _image.*(Expected|Got)(\d+).png.
            For each such file construct an html img element with the data encoded
            in a dataurl.
            If we're running the sample answer, always return [] - images will be

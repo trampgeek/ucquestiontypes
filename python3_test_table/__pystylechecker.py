@@ -182,13 +182,6 @@ class StyleChecker:
                                     name in restricted[import_name].get('disallow', [])):
                                 errors.append("Your program should not import '{}' from '{}'.".format(name, import_name))
 
-        if 'maxreturndepth' in self.params and (max_depth := self.params['maxreturndepth']) is not None:
-            bad_returns = self.find_nested_returns(max_depth)
-            if bad_returns:
-                if max_depth == 1:
-                    errors.append("This question does not allow return statements within loops, if statements etc")
-                else:
-                    errors.append(f"This question does not allow return statements to be indented more than '{max_depth}' levels")
         return errors
 
     def find_all_imports(self):
@@ -280,48 +273,6 @@ class StyleChecker:
         visitor = FuncFinder()
         visitor.visit(self.tree)
         return defined
-    
-
-    def nested_returns(self):
-        """Return a dictionary in which the keys are nesting depth (0, 1, 2, ..9) and the
-           values are counts of the number of return statements at that level. Nesting
-           level is deemed to increase with def, if, for, while, try, except and with
-           statements.
-        """
-        counts = {i: 0 for i in range(10)}
-        depth = 0
-        class ReturnFinder(ast.NodeVisitor):
-            def visit_body(self, node):
-                nonlocal depth
-                depth += 1
-                self.generic_visit(node)
-                depth -= 1
-            def visit_For(self, node):
-                self.visit_body(node)
-            def visit_While(self, node):
-                self.visit_body(node)
-            def visit_FunctionDef(self, node):
-                self.visit_body(node)
-            def visit_If(self, node):
-                self.visit_body(node)
-            def visit_Try(self, node):
-                self.visit_body(node)
-            def visit_TryExcept(self, node):
-                self.visit_body(node)
-            def visit_TryFinally(self, node):
-                self.visit_body(node)
-            def visit_ExceptHandler(self, node):
-                self.visit_body(node)
-            def visit_With(self, node):
-                self.visit_body(node)
-            def visit_Return(self, node):
-                nonlocal depth
-                counts[depth] += 1
-                self.generic_visit(node)
-
-        visitor = ReturnFinder()
-        visitor.visit(self.tree)
-        return counts
 
 
     def constructs_used(self):
@@ -348,8 +299,6 @@ class StyleChecker:
                 self.generic_visit(node)
             def visit_While(self, node):
                 constructs_seen.add('while')
-                if node.orelse:
-                    constructs_seen.add('while_with_else')
                 self.generic_visit(node)
             def visit_Comprehension(self, node):
                 constructs_seen.add('comprehension')
@@ -492,17 +441,15 @@ class StyleChecker:
     def find_global_code(self):
         """Return a list of error messages relating to the existence of
            any global assignment, for, while and if nodes. Ignores
-           global assignment statements with an ALL_CAPS target and
-           if __name__ == "__main__"
-        """
-        style_checker = self
+           global assignment statements with an ALL_CAPS target."""
+
         global_errors = []
         class MyVisitor(ast.NodeVisitor):
             def visit_Assign(self, node):
                 if node.col_offset == 0:
                     if len(node.targets) > 1 or isinstance(node.targets[0], ast.Tuple):
                         global_errors.append(f"Multiple targets in global assignment statement at line {node.lineno}")
-                    elif not (node.targets[0].id.isupper() or isinstance(node.value, ast.Lambda)):
+                    elif not node.targets[0].id.isupper():
                         global_errors.append(f"Global assignment statement at line {node.lineno}")
 
             def visit_For(self, node):
@@ -514,20 +461,12 @@ class StyleChecker:
                     global_errors.append(f"Global while loop at line {node.lineno}")
 
             def visit_If(self, node):
-                if node.col_offset == 0 and not style_checker.is_main_check(node):
+                if node.col_offset == 0:
                     global_errors.append(f"Global if statement at line {node.lineno}")
 
         visitor = MyVisitor()
         visitor.visit(self.tree)
         return global_errors
-
-
-    def is_main_check(self, node):
-        """Return True iff the given node is a check if the current module is '__main__'.
-           Just checks if both the strings '__name__' and '__main__' are present in the line.
-        """
-        line = self.student_answer.splitlines()[node.lineno - 1]
-        return '__main__' in line and '__name__' in line
 
 
     def find_nested_functions(self):
@@ -550,11 +489,3 @@ class StyleChecker:
         visitor = MyVisitor()
         visitor.visit(self.tree)
         return bad_funcs
-    
-
-    def find_nested_returns(self, max_depth):
-        """Return a count of the number of return statements
-           at a nesting depth in excess of max_depth.
-        """
-        returns = self.nested_returns()
-        return sum(returns[depth] for depth in range(max_depth + 1, 10))
