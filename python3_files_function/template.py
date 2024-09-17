@@ -8,7 +8,7 @@ import random
 from pytester import PyTester
 
 STANDARD_PYLINT_OPTIONS = ['--disable=trailing-whitespace,superfluous-parens,' + 
-                      'too-few-public-methods,consider-using-f-string,' +
+                      'too-few-public-methods,consider-using-f-string,' + 
                       'redefined-builtin,' +
                       'unbalanced-tuple-unpacking,too-many-statements,' + 
                       'consider-using-enumerate,simplifiable-if-statement,' + 
@@ -116,7 +116,6 @@ KNOWN_PARAMS = {
 class TestCase:
     def __init__(self, dict_rep):
         """Construct a testcase from a dictionary representation obtained via JSON"""
-        global PARAMS
         self.testcode = dict_rep['testcode']
         self.stdin = dict_rep['stdin']
         self.expected = dict_rep['expected']
@@ -274,7 +273,8 @@ process_template_params()
 test_cases = get_test_cases()
 process_global_params()
 
-if PARAMS['useanswerfortests']:
+# If using answer for tests and not a precheck where the question is using 'empty' precheck.
+if PARAMS['useanswerfortests'] and not (PARAMS['IS_PRECHECK'] and PARAMS['QUESTION_PRECHECK']==1):
     outcome, test_cases = get_expecteds_from_answer(PARAMS, test_cases)
 
 if test_cases:
