@@ -17,7 +17,7 @@ DEFAULT_PARAMS = {
     'show_xlim': False,  # True to display the x-axis limits
     'show_ylim': False,  # True to display the y-axis limits
     'show_colour': False,  # True to report line/marker colour
-    'show_xticklabels': None,  # True to display x-tick labels (defaults True for bars, False otherwise)
+    'show_xticklabels': False,  # True to display x-tick labels
     'show_yticklabels': False,  # True to display y-tick labels
     'show_xticks': False,  # True to display x-tick numeric values
     'show_yticks': False,  # True to display y-tick numeric values

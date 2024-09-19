@@ -17,7 +17,7 @@ DEFAULT_PARAMS = {
     'show_xlim': False,  # True to display the x-axis limits
     'show_ylim': False,  # True to display the y-axis limits
     'show_colour': False,  # True to report line/marker colour
-    'show_xticklabels': None,  # True to display x-tick labels (defaults True for bars, False otherwise)
+    'show_xticklabels': False,  # True to display x-tick labels
     'show_yticklabels': False,  # True to display y-tick labels
     'show_xticks': False,  # True to display x-tick numeric values
     'show_yticks': False,  # True to display y-tick numeric values
@@ -244,8 +244,10 @@ class PlotChecker:
             print(f'{axis.upper()}-axis ticks at ', ', '.join(formatted_ticks))
 
         if self.params[f'show_{axis}ticklabels']:
-            # A problem here is that in a call to bar(axis_labels, bar_heights) the call to get_xticklabels doesn't
-            # return the actual labels, but rather their tick locations. I can't find a workaround for this.
+            # A problem here is that in a call to bar(axis_labels, bar_heights)
+            # the call to get_xticklabels doesn't return the actual labels,
+            # but rather their tick locations.
+            # I can't find a workaround for this.
             if all(label.strip() == '' for label in tick_labels):
                 tick_labels = formatted_ticks
             tick_labels = self.in_range(tick_labels, axis_limit)
@@ -284,13 +286,11 @@ class PlotChecker:
         """Print the info for a single given subplot.
            If the data_type is 'lines' an optional parameter x_samples
            can be used to specify x values at which the line should be sampled.
-           If the data_type is lines, the x-tick labels are shown unless
-           the show_xticklabels parameters is explicitly set to False.
+           ticks and tick labels are shown only if the show_{axis}ticks and
+           show_{axis}labels parameters are explicitly set to True.
            title is a Text object, not a string.
         """
         if not self.params['line_info_only']:
-            if self.params['show_xticklabels'] is None and data_type == 'bars':
-                self.params['show_xticklabels'] = True
             has_legend = subplot.get_legend() is not None
             if has_legend and self.params['show_linelabels'] is None:
                 self.params['show_linelabels'] = True
