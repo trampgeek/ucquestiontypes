@@ -9,6 +9,7 @@ import traceback
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colors as colors
+from matplotlib.collections import PathCollection
 from scipy import interpolate
 
 DEFAULT_PARAMS = {
@@ -97,6 +98,41 @@ class PlotChecker:
         """Given a matplotlib colour, convert to a standarised format"""
         rgb = colors.to_rgb(colour)
         return f"RGB({rgb[0]:0.2f}, {rgb[1]:0.2f}, {rgb[2]:0.2f})"
+    
+    
+    def print_points(self, data):
+        """Print a subset of the given points"""
+        print(f"Num points: {len(data)}")
+        n = min(len(data), self.params['first_num_points'])
+        if n:
+            points = '\n    '.join(self.fmt_float_pair(p) for p in data[:n])
+            if n < len(data):
+                print(f"First {n} points:\n    {points}")
+            else:
+                print(f"    {points}")
+        last_n = min(len(data) - n, self.params['last_num_points'])
+        if last_n:
+            points = '\n    '.join(self.fmt_float_pair(p) for p in data[-last_n:])
+            print(f"Last {last_n} points:\n    {points}")
+            
+    
+    def print_scatter(self, scatter):
+        """Print the data for a given scatter plot.
+           Unfortunately we can't determine what the original marker shape
+           was, as it has been converted to a path object. It's not practicable
+           to try inferring the plot char ('o', '^' etc) from that.
+        """
+        if self.params['show_colour']:
+            facecolors = scatter.get_facecolors()
+            print("Color:", self.normalise_colour(facecolors[0]) if len(facecolors) else "Unknown")
+        print("Marker: o")
+        print("Line style: None")
+        points = scatter.get_offsets()
+        if self.params['sort_points']:
+            points = np.array(sorted([[point[0], point[1]] for point in points]))
+            print("Plotted data, after sorting ...")        
+        self.print_points(points)
+
 
     def print_line(self, line, xsamples):
         """Print the info for the given line"""
@@ -106,7 +142,10 @@ class PlotChecker:
         if marker == '':
             marker = None
         print("Marker:", marker)
-        print("Line style:", line.get_linestyle())
+        linestyle = line.get_linestyle()
+        if not linestyle:
+            linestyle = None
+        print("Line style:", linestyle)
         label = line.get_label()
         if label and self.params['show_linelabels']:
             print("Label:", label)
@@ -124,28 +163,27 @@ class PlotChecker:
             for p in interpolated:
                 print('   ', self.fmt_float_pair(p))
         else:
-            print(f"Num points: {len(data)}")
-            n = min(len(data), self.params['first_num_points'])
-            if n:
-                points = '\n    '.join(self.fmt_float_pair(p) for p in data[:n])
-                if n < len(data):
-                    print(f"First {n} points:\n    {points}")
-                else:
-                    print(f"    {points}")
-            last_n = min(len(data) - n, self.params['last_num_points'])
-            if last_n:
-                points = '\n    '.join(self.fmt_float_pair(p) for p in data[-last_n:])
-                print(f"Last {last_n} points:\n    {points}")
+            self.print_points(data)
 
     def print_lines(self, subplot, xsamples):
         """Print all selected lines in the plot showing y values interplolated at the x sample points,
            if given. Otherwise, print just the first first_num_points and last last_num_points. Also
            show line colours if the show_colour parameter is True.
+           Extended to print the points from a scatter plot if the student called
+           scatter.
         """
         lines = subplot.get_lines()
+        is_scatter_plot = False
         if len(lines) == 0:
-            print("No plotted lines found")
-            return
+            # May be a call to scatter. Try for that.
+            scatter_plots = [child for child in subplot._children if isinstance(child, PathCollection)]
+            if xsamples or len(scatter_plots) == 0:
+                print("No plotted data found")
+                return
+            else:
+                lines = scatter_plots # Telling porkies here, but read on.
+                is_scatter_plot = True
+
         line_indices = self.params['lines_to_print']
         if line_indices is None:
             wanted_lines = lines
@@ -164,9 +202,13 @@ class PlotChecker:
         for i, line in enumerate(wanted_lines, 1):
             if multilines:
                 print(f"Line {i}:")
-            self.print_line(line, xsamples)
+            if is_scatter_plot:
+                self.print_scatter(line)
+            else:
+                self.print_line(line, xsamples)
             if multilines:
                 print()
+           
 
     @staticmethod
     def in_range(labels, limits):
