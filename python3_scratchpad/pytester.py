@@ -110,7 +110,7 @@ class PyTester(Tester):
                         errors.append(passive)
 
         if len(errors) == 0 or self.params.get('forcepylint', False):
-            # Run precheckers (pylint, mypy)
+            # Run precheckers (pylint, ruff, mypy)
             try:
                 # Style-check the program without any test cases or other postlude added
                 errors += self.style_checker.style_errors()
@@ -156,8 +156,6 @@ class PyTester(Tester):
                 '    print(f"{_mpl.pyplot.get_figlabels()}")'
             ]) + '\n'
         task = pytask.PyTask(self.params, code)
-        with open(f"WTF{randint(0,100)}.py", 'w') as outfile:
-            outfile.write(code)
         task.compile()
         captured_output, captured_error = task.run_code()
         return (captured_output + '\n' + captured_error).strip()
@@ -222,6 +220,7 @@ class PyTester(Tester):
                 (r'(.*:)(\d+)(:\d+: [A-Z]\d+: .*line )(\d+)(.*)', [2, 4]),
                 (r'(.*:)(\d+)(:\d+: [A-Z]\d+: .*)', [2]),
                 (r'(.*:)(\d+)(: [a-zA-Z]*Warning.*)', [2]),
+                (r'(.*:)(\d+)(: \[.+\] .*)', [2]),
         ]
         output_lines = []
         for line in error.splitlines():
@@ -232,7 +231,7 @@ class PyTester(Tester):
                     for i, group in enumerate(match.groups(), 1):
                         if i in line_group_nums:
                             linenum = int(match.group(i))
-                            adjusted = linenum - self.prelude_length
+                            adjusted = max(0, linenum - self.prelude_length)
                             line += str(adjusted)
                         else:
                             line += group
@@ -244,11 +243,14 @@ class PyTester(Tester):
     def simplify_error(self, error):
         """Return a simplified version of a pylint error with Line <n> inserted in
            lieu of __source.py:<n><p>: Xnnnn
+           The underscores are optional because ruff behaves differently with
+           files whose names start with underscore, so we change the name to
+           source__.py for ruff checks.
         """
-        pattern = r'__source.py:(\d+): *\d+: *[A-Z]\d+: (.*)'
+        pattern = r'_?_?source_?_?.py:(-?\d+):( *\d+: *[A-Z]\d+:| \[.+\]) (.*)'
         match = re.match(pattern, error)
         if match:
-            return f"Line {match.group(1)}: {match.group(2)}"
+            return f"Line {match.group(1)}: {match.group(3)}"
         else:
             return error
 

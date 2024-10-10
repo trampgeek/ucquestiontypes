@@ -126,7 +126,7 @@ class CodeTrap(object):
         else:
             new_input = input
         
-        # (mct63) Create a new builtins dictionary, redfining any functions that are not allowed.
+        # (mct63) Create a new builtins dictionary, redefining any functions that are not allowed.
         new_builtins = {key:value for key, value in __builtins__.items()}
         new_builtins['open'] = new_open
         new_builtins['input'] = new_input

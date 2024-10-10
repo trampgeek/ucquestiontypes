@@ -37,34 +37,45 @@ class StyleChecker:
         env = os.environ.copy()
         env['HOME'] = os.getcwd()
         pylint_opts = self.params.get('pylintoptions',[])
+        ruff_opts = self.params.get('ruffoptions', [])
+
         precheckers = self.params.get('precheckers', ['pylint'])
         result = ''
 
-        if 'pylint' in precheckers:
-            try:  # Run pylint
-                cmd = f'{sys.executable} -m pylint ' + ' '.join(pylint_opts) + ' __source.py'
-                result = subprocess.check_output(cmd,
-                                             stderr=subprocess.STDOUT,
-                                             universal_newlines=True,
-                                             env=env,
-                                             shell=True)
-            except Exception as e:
-                result = e.output
-                
-            else:
-                # (mct63) Abort if there are any comments containing 'pylint:'.
-                try:
-                    tokenizer = tokenize.tokenize(BytesIO(self.student_answer.encode('utf-8')).readline)
-                    for token_type, token_text, *_ in tokenizer:
-                        if token_type == tokenize.COMMENT and 'pylint:' in token_text:
-                            errors.append("Comments can not include 'pylint:'")
-                            break
-        
-                except Exception:
-                    errors.append("Something went wrong while parsing comments. Report this.")
+        # First try checking with pylint and/or ruff.
+        # Ruff treats filenames starting with underscore as private, changing its behaviour.
+        # So we create a temporary file source__.py then delete it again.
+        linters = [
+            ('pylint', f'{sys.executable} -m pylint ' + ' '.join(pylint_opts) + ' __source.py', 'pylint:'),
+            ('ruff', f'cp __source.py source__.py;/usr/local/bin/ruff check --quiet {" ".join(ruff_opts)} source__.py; rm source__.py', 'noqa'),
+        ]
 
-            if "Using config file" in result:
-                result = '\n'.join(result.splitlines()[1:]).split()
+        for linter, cmd, disable_keyword in linters:
+            if linter in precheckers:
+                try:  # Run pylint or ruff
+                    result = subprocess.check_output(cmd,
+                                                stderr=subprocess.STDOUT,
+                                                universal_newlines=True,
+                                                env=env,
+                                                shell=True)
+                except Exception as e:
+                    result = e.output
+                    
+                else:
+                    # (mct63) Abort if there are any comments disabling the linter'.
+                    try:
+                        tokenizer = tokenize.tokenize(BytesIO(self.student_answer.encode('utf-8')).readline)
+                        for token_type, token_text, *_ in tokenizer:
+                            if token_type == tokenize.COMMENT and disable_keyword in token_text:
+                                errors.append(f"Comments can not include '{disable_keyword}'")
+                                break
+            
+                    except Exception:
+                        errors.append("Something went wrong while parsing comments. Report this.")
+
+                if "Using config file" in result:
+                    result = '\n'.join(result.splitlines()[1:]).split()
+
 
         if result == '' and 'mypy' in precheckers:
             code_to_check = 'from typing import List as list, Dict as dict, Tuple as tuple, Set as set, Any\n' + code_to_check
