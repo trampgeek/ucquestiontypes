@@ -273,7 +273,7 @@ class Tester:
             match = re.match(r'_image[^.]*\.(Expected|Got)\.(\d+).png', filename)
             if match:
                 image_data = get_jpeg_b64(filename)
-                img_html = '<img{width_spec} style="margin:3px;border:1px solid black" src="filename}">'
+                img_html = f'<img{width_spec} style="margin:3px;border:1px solid black" src="{filename}">'
                 column = match.group(1)   # Name of column
                 row = int(match.group(2)) # 0-origin row number
                 images.append((filename, image_data, img_html, column, row))
@@ -334,6 +334,9 @@ class Tester:
 
         if epilogue:
             outcome['epiloguehtml'] = epilogue
+
+        if files:
+            outcome['files'] = files
         return outcome
 
     @staticmethod

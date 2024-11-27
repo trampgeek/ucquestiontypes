@@ -79,36 +79,28 @@ class PyTester(Tester):
         return prog.startswith('"') or prog.startswith("'")
 
     def style_errors(self):
-        """Return a list of all the style errors. Start with local tests and continue with pylint
-           only if there are no local errors.
-        """
-        errors = []
-        if self.params.get('localprechecks', True):
-            try:
-                errors += self.style_checker.local_errors() # Note: prelude not included so don't adjust line nums
-            except Exception as e:
-                errors += [str(e)]
-            else:
-                check_for_passive = (self.params['warnifpassiveoutput'] and self.params['isfunction'])
-                if check_for_passive and self.passive_output():
-                    errors.append("Your code was not expected to generate any output " +
-                        "when executed stand-alone.\nDid you accidentally include " +
-                        "your test code?")
+        """Return a list of all the style errors."""
+        try:
+            # Style-check the program without any test cases or other postlude added
+            errors = self.style_checker.style_errors()
+        except Exception as e:
+            error_text = '*** Unexpected error while runner precheckers. Please report ***\n' + str(e)
+            errors = [error_text]
+        errors = [self.adjust_error_line_nums(error) for error in errors]
 
-        if len(errors) == 0 or self.params.get('forcepylint', False):
-            # Run precheckers (pylint, mypy)
+        if len(errors) == 0:
             try:
-                # Style-check the program without any test cases or other postlude added
-                errors += self.style_checker.style_errors()
+                errors = self.style_checker.local_errors() # Note: prelude not included so don't adjust line nums
             except Exception as e:
-                error_text = '*** Unexpected error while running precheckers. Please report ***\n' + str(e)
-                errors += [error_text]
-            errors = [self.simplify_error(self.adjust_error_line_nums(error)) for error in errors]
-            errors = [error for error in errors if not error.startswith('************* Module')]
+                error_text = '*** Unexpected error while doing local style checks. Please report ***\n' + str(e)
+                errors = [error_text]
 
-        errors = [error.replace('<unknown>, ', '') for error in errors]  # Another error tidying operation
-        if errors:
-            errors.append("\nSorry, but your code doesn't pass the style checks.")
+        check_for_passive = (self.params['warnifpassiveoutput'] and self.params['isfunction'])
+        if len(errors) == 0 and check_for_passive and self.passive_output():
+            errors.append("Your code was not expected to generate any output " +
+                "when executed stand-alone.\nDid you accidentally include " +
+                "your test code?")
+
         return errors
 
     def prerun_hook(self):
@@ -162,10 +154,6 @@ class PyTester(Tester):
             tester += test.extra + '\n'
 
         if self.params['usesmatplotlib']:
-            if 'dpi' in self.params and self.params['dpi']:
-                extra = f", dpi={self.params['dpi']}"
-            else:
-                extra = ''
             if self.params.get('running_sample_answer', False):
                 column = 'Expected'
             else:
@@ -177,7 +165,7 @@ class PyTester(Tester):
                 '    _mpl.pyplot.figure(fig)',
                 '    row = {}'.format(test_num),
                 '    column = "{}"'.format(column),
-                '    _mpl.pyplot.savefig("_image{}.{}.{}.png".format(fig, column, row), bbox_inches="tight"' + '{})'.format(extra),
+                '    _mpl.pyplot.savefig("_image{}.{}.{}.png".format(fig, column, row), bbox_inches="tight")',
                 '    _mpl.pyplot.close(fig)'
             ]) + '\n'
         return tester
@@ -216,17 +204,6 @@ class PyTester(Tester):
 
             output_lines.append(line)
         return '\n'.join(output_lines)
-
-    def simplify_error(self, error):
-        """Return a simplified version of a pylint error with Line <n> inserted in
-           lieu of __source.py:<n><p>: Xnnnn
-        """
-        pattern = r'__source.py:(\d+): *\d+: *[A-Z]\d+: (.*)'
-        match = re.match(pattern, error)
-        if match:
-            return f"Line {match.group(1)}: {match.group(2)}"
-        else:
-            return error
 
     def main_hacks(self):
         """Modify the code to be tested if params stripmain or stripmainifpresent'

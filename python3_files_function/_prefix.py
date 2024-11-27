@@ -15,4 +15,4 @@ def _my_open(filename, *args, **kwargs):
     file.close = MethodType(_my_close, file)
     return file
 
-open = _my_open
+open = _my_open # noqa A001  - disable ruff warning

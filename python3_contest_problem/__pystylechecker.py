@@ -1,10 +1,8 @@
-"""All the style checking code for Python3.
-   This special version disallows any global code
-   except function defs and global constants.
-"""
+"""All the style checking code for Python3"""
 
 from io import BytesIO
 import os
+import sys
 import subprocess
 import ast
 import tokenize
@@ -44,12 +42,12 @@ class StyleChecker:
 
         if 'pylint' in precheckers:
             try:  # Run pylint
-                cmd = 'python3.9 -m pylint ' + ' '.join(pylint_opts) + ' __source.py'
+                cmd = f'{sys.executable} -m pylint ' + ' '.join(pylint_opts) + ' __source.py'
                 result = subprocess.check_output(cmd,
-                                                 stderr=subprocess.STDOUT,
-                                                 universal_newlines=True,
-                                                 env=env,
-                                                 shell=True)
+                                             stderr=subprocess.STDOUT,
+                                             universal_newlines=True,
+                                             env=env,
+                                             shell=True)
             except Exception as e:
                 result = e.output
                 
@@ -72,13 +70,13 @@ class StyleChecker:
             code_to_check = 'from typing import List as list, Dict as dict, Tuple as tuple, Set as set, Any\n' + code_to_check
             with open('__source2.py', 'w', encoding='utf-8') as outfile:
                 outfile.write(code_to_check)
-            cmd = 'python3.8 -m mypy --no-error-summary --no-strict-optional __source2.py'
+            cmd = f'{sys.executable} -m mypy --no-error-summary --no-strict-optional __source2.py'
             try: # Run mypy
                 subprocess.check_output(cmd,  # Raises an exception if there are errors
-                                        stderr=subprocess.STDOUT,
-                                        universal_newlines=True,
-                                        env=env,
-                                        shell=True)
+                                     stderr=subprocess.STDOUT,
+                                     universal_newlines=True,
+                                     env=env,
+                                     shell=True)
             except Exception as e:
                 result = e.output
                 line_num_fix = lambda match: "Line " + str(int(match[1]) - 1 - prelude_len) + match[2]
@@ -91,9 +89,25 @@ class StyleChecker:
 
         if result:
             errors = result.strip().splitlines()
-            errors.append("Sorry, but your code doesn't pass the style checks.")
 
         return errors
+    
+    def prettied(self, construct):
+        """Expand, if possible, the name of the given Python construct to a more
+           user friendly version, e.g. 'listcomprehension' -> 'list comprehension'
+        """
+        expanded = {
+            'listcomprehension': 'list comprehension',
+            'while': 'while loop',
+            'for': 'for loop',
+            'try': 'try ... except statement',
+            'dictcomprehension': 'dictionary comprehension',
+            'slice': 'slice'
+        }
+        if construct in expanded:
+            return expanded[construct]
+        else:
+            return f"{construct} statement"
 
     def local_errors(self):
         """Perform various local checks as specified by the current set of
@@ -104,6 +118,15 @@ class StyleChecker:
         for banned in self.params.get('proscribedsubstrings', []):
             if banned in self.student_answer:
                 errors.append(f"The string '{banned}' is not permitted anywhere in your code.")
+
+        for required in self.params.get('requiredsubstrings', []):
+            if isinstance(required, str) and required not in self.student_answer:
+                errors.append(f'The string "{required}" must occur somewhere in your code.')
+            elif isinstance(required, dict): 
+                if 'pattern' in required and not re.findall(required['pattern'], self.student_answer):
+                    errors.append(required['errormessage'])
+                elif 'string' in required and required['string'] not in self.student_answer:
+                    errors.append(required['errormessage'])
 
         if self.params.get('banglobalcode', True):
             errors += self.find_global_code()
@@ -134,11 +157,13 @@ class StyleChecker:
 
         missing_constructs = self.find_missing_required_constructs()
         for reqd in missing_constructs:
-            errors.append("Your program must include at least one " + reqd + " statement.")
+            expanded = self.prettied(reqd)
+            errors.append(f"Your program must include at least one {expanded}.")
 
         bad_constructs = self.find_illegal_constructs()
         for notallowed in bad_constructs:
-            errors.append("Your program must not include any " + notallowed + "s.")
+            expanded = self.prettied(notallowed)
+            errors.append(f"Your program must not include any {expanded}s.")
 
         num_constants = len([line for line in self.student_answer.split('\n') if re.match(' *[A-Z_][A-Z_0-9]* *=', line)])
         if num_constants > self.params['maxnumconstants']:
@@ -220,6 +245,7 @@ class StyleChecker:
             self.function_call_map = visitor.found_funcs
         return self.function_call_map
 
+
     def find_defined_functions(self):
         """Find all the functions defined."""
         defined = set()
@@ -248,6 +274,7 @@ class StyleChecker:
         visitor.visit(self.tree)
         return defined
 
+
     def constructs_used(self):
         """Return a set of all constructs encountered in the parse tree"""
         constructs_seen = set()
@@ -272,6 +299,8 @@ class StyleChecker:
                 self.generic_visit(node)
             def visit_While(self, node):
                 constructs_seen.add('while')
+                if node.orelse:
+                    constructs_seen.add('while_with_else')
                 self.generic_visit(node)
             def visit_Comprehension(self, node):
                 constructs_seen.add('comprehension')
@@ -344,31 +373,37 @@ class StyleChecker:
         """Look for occurances of a specific function call"""
         return self.find_all_function_calls().get(name, [])
 
+
     def find_illegal_functions(self):
         """Find a set of all the functions that the student uses
            that they are not allowed to use. """
         func_calls = self.find_all_function_calls()
         return func_calls.keys() & set(self.params['proscribedfunctions'])
 
+
     def find_missing_required_function_calls(self):
         """Find a set of the required functions that the student fails to use"""
         func_calls = self.find_all_function_calls()
         return set(self.params['requiredfunctioncalls']) - func_calls.keys()
+
 
     def find_missing_required_function_definitions(self):
         """Find a set of required functions that the student fails to define"""
         func_defs = self.find_defined_functions()
         return set(self.params['requiredfunctiondefinitions']) - func_defs
 
+
     def find_illegal_constructs(self):
         """Find all the constructs that were used but not allowed"""
         constructs = self.constructs_used()
         return constructs & set(self.params['proscribedconstructs'])
 
+
     def find_missing_required_constructs(self):
         """Find which of the required constructs were not used"""
         constructs = self.constructs_used()
         return set(self.params['requiredconstructs']) - constructs
+
 
     def find_too_long_funcs(self, max_length):
         """Return a list of the functions that exceed the given max_length
@@ -404,18 +439,21 @@ class StyleChecker:
         visitor.visit(self.tree)
         return bad_funcs
 
+
     def find_global_code(self):
         """Return a list of error messages relating to the existence of
            any global assignment, for, while and if nodes. Ignores
-           global assignment statements with an ALL_CAPS target."""
-
+           global assignment statements with an ALL_CAPS target and
+           if __name__ == "__main__"
+        """
+        style_checker = self
         global_errors = []
         class MyVisitor(ast.NodeVisitor):
             def visit_Assign(self, node):
                 if node.col_offset == 0:
-                    if len(node.targets) > 1:
+                    if len(node.targets) > 1 or isinstance(node.targets[0], ast.Tuple):
                         global_errors.append(f"Multiple targets in global assignment statement at line {node.lineno}")
-                    elif not node.targets[0].id.isupper():
+                    elif not (node.targets[0].id.isupper() or isinstance(node.value, ast.Lambda)):
                         global_errors.append(f"Global assignment statement at line {node.lineno}")
 
             def visit_For(self, node):
@@ -427,12 +465,21 @@ class StyleChecker:
                     global_errors.append(f"Global while loop at line {node.lineno}")
 
             def visit_If(self, node):
-                if node.col_offset == 0:
+                if node.col_offset == 0 and not style_checker.is_main_check(node):
                     global_errors.append(f"Global if statement at line {node.lineno}")
 
         visitor = MyVisitor()
         visitor.visit(self.tree)
         return global_errors
+
+
+    def is_main_check(self, node):
+        """Return True iff the given node is a check if the current module is '__main__'.
+           Just checks if both the strings '__name__' and '__main__' are present in the line.
+        """
+        line = self.student_answer.splitlines()[node.lineno - 1]
+        return '__main__' in line and '__name__' in line
+
 
     def find_nested_functions(self):
         """Return a list of functions that are declared with non-global scope"""

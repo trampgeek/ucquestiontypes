@@ -5,7 +5,9 @@
 """
 import html
 import re
+import base64
 from collections import defaultdict
+from urllib.parse import quote
 
 MAX_STRING_LENGTH = 4000  # 4k is default maximum string length
 
@@ -14,27 +16,35 @@ class ResultTable:
     def __init__(self, params):
         self.params = params
         self.mark = 0
+        self.max_mark = 0
         self.table = None
         self.failed_hidden = False
         self.aborted = False
         self.has_stdins = False
         self.has_tests = False
+        self.has_extra = False
+        self.has_expected = False
+        self.has_got = False
         self.hiding = False
         self.num_failed_tests = 0
+        self.num_failed_hidden_tests = 0
         self.missing_tests = 0
         self.global_error = ''
-        self.column_formats = None
+        self.column_formats = {}  # Map from raw column name to format
+        self.column_formats_by_hdr = {}  # Map from header name to format
         self.images = defaultdict(list)
         default_params = {
             'stdinfromextra': False,
             'strictwhitespace': True,
             'floattolerance': None,
-            'resulttablecolumns': ['Test', 'Input', 'Expected', 'Got'],
+            'resultcolumns': [['Test', 'testcode'], ['Input', 'stdin'], ['Expected', 'expected'], ['Got', 'got']],
             'ALL_OR_NOTHING': True
         }
         for param, value in default_params.items():
             if param not in params:
                 self.params[param] = value
+
+        self.is_file_question = self.params['extra'] == 'files'
 
 
     def set_header(self, testcases):
@@ -42,29 +52,51 @@ class ResultTable:
            and set flags to indicate presence or absence
            of various table columns.
         """
-        columns = self.params['resulttablecolumns']
         header = ['iscorrect']
-        self.column_formats = ['%s']
-        if 'Test' in columns and any(test.testcode.strip() != '' for test in testcases):
-            header.append("Test")
-            self.has_tests = True
-            # If the test code should be rendered in html then set that as column format.
-            if any(getattr(test, 'test_code_html', None) for test in testcases):
-                self.column_formats.append('%h')
+        required_columns = {}
+        for hdr, field, *format in self.params['resultcolumns']:
+            required_columns[field] = hdr
+            if field == 'extra' and self.is_file_question:
+                format = '%h'  # See format_extra function.
             else:
-                self.column_formats.append('%s')
+                format = format if format else '%s'
+            self.column_formats[field] = format
+            self.column_formats_by_hdr[hdr] = format
 
-        stdins = [test.extra if self.params['stdinfromextra'] else test.stdin for test in testcases]
-        if 'Input' in columns and any(stdin.rstrip() != '' for stdin in stdins):
-            header.append('Input')
-            self.column_formats.append('%s')
-            self.has_stdins = True
-        for col in ['Expected', 'Got']:
-            if col in columns:
-                header.append(col)
-                self.column_formats.append('%s')
+        if 'testcode' in required_columns and any(test.testcode.strip() != '' for test in testcases):
+            header.append(required_columns['testcode'])
+            self.has_tests = True
+
+            # *** WHAT WAS THIS ABOUT??? ***
+            # If the test code should be rendered in html then set that as column format.
+            #if any(getattr(test, 'test_code_html', None) for test in testcases):
+            #    self.column_formats.append('%h')
+            #else:
+            #    self.column_formats.append('%s')
+
+        # If this is a write-a-function file question, the stdin field is hidden regardless.
+        # TODO: are there exceptions to this?
+        hide_stdin = self.is_file_question and self.params['isfunction']
+        if not hide_stdin:
+            stdins = [test.extra if self.params['stdinfromextra'] else test.stdin for test in testcases]
+            if 'stdin' in required_columns and any(stdin.rstrip() != '' for stdin in stdins):
+                header.append(required_columns['stdin'])
+                self.has_stdins = True
+
+        if 'extra' in required_columns:
+            header.append(required_columns['extra'])
+            self.has_extra = True
+    
+        if 'expected' in required_columns:
+            header.append(required_columns['expected'])
+            self.has_expected = True
+
+        # *** CONSIDER USE OF GOT IN FILES questions (and others). Can contain error messages. Should always include??
+        if 'got' in required_columns:
+            header.append(required_columns['got'])
+            self.has_got = True
+
         header += ['iscorrect', 'ishidden']
-        self.column_formats += ['%s', '%s']
         self.table = [header]
 
     def image_column_nums(self):
@@ -76,7 +108,12 @@ class ResultTable:
             Don't have formats for iscorrect and ishidden columns.
         """
         image_columns = self.image_column_nums()
-        formats = [self.column_formats[i] if i not in image_columns else '%h' for i in range(len(self.column_formats))]
+        formats = []
+        for i, column_hdr in enumerate(self.table[0]):
+            if i in image_columns:
+                formats.append('%h')
+            else:
+                formats.append(self.column_formats_by_hdr.get(column_hdr, '%s'))
         return formats[1:-2]
 
     def get_table(self):
@@ -115,21 +152,45 @@ class ResultTable:
     def record_global_error(self, error_message):
         """Record some sort of global failure"""
         self.global_error = error_message
+  
+    def format_extra_for_files(self, extra, filename):
+        """Format the extra field (which should be the contents of a file). If 
+           the longest line exceeds filedownloadwidth or the number of lines
+           exceeds filedownloadlines the file is converted into a data URI.
+           Otherwise it's returned as is.
+        """
+        lines = extra.splitlines()
+        too_wide = len(lines) > 0 and (max(len(line) for line in lines) > self.params['filedownloadwidth'])
+        too_high = len(lines) > self.params['filedownloadlines']
+        if too_wide or too_high:
+            quoted = quote(extra)
+            link = f'<a href="data:text/plain;charset=utf-8,{quoted}" download={filename}><span style="color:blue;font-weight:bold;text-decoration: underline;">Download</span></a>'
+            return link
+        return '<pre>' + extra + '</pre>'
 
     def add_row(self, testcase, result, error=''):
         """Add a result row to the table for the given test and result"""
-        columns = self.params['resulttablecolumns']
         is_correct = self.check_correctness(result + error, testcase.expected)
         row = [is_correct]
-        if 'Test' in columns and self.has_tests:
+        if self.has_tests:
             if getattr(testcase, 'test_code_html', None):
                 row.append(testcase.test_code_html)
             else:
                 row.append(testcase.testcode)
-        if 'Input' in columns and self.has_stdins:
+
+        if self.has_stdins:
             row.append(testcase.extra if self.params['stdinfromextra'] else testcase.stdin)
-        if 'Expected' in columns:
+
+        if self.has_extra:
+            if self.params['extra'] == 'files':
+                filename = testcase.stdin.splitlines()[0]
+                row.append(self.format_extra_for_files(testcase.extra, filename))
+            else:
+                row.append(testcase.extra)
+            
+        if self.has_expected:
             row.append(testcase.expected.rstrip())
+
         max_len = self.params.get('maxstringlength', MAX_STRING_LENGTH)
         result = sanitise(result.rstrip('\n'), max_len)
 
@@ -139,15 +200,20 @@ class ResultTable:
                 result = result + '\n' + error_message
             else:
                 result = error_message
-        if 'Got' in columns:
+
+        if self.has_got or error:
             row.append(result)
 
+        display = testcase.display.upper()
+        self.max_mark += testcase.mark
         if is_correct:
             self.mark += testcase.mark
         else:
             self.num_failed_tests += 1
+            if display == 'HIDE':
+                self.num_failed_hidden_tests += 1
         row.append(is_correct)
-        display = testcase.display.upper()
+
         is_hidden = (
             self.hiding or
             display == 'HIDE' or
@@ -164,7 +230,16 @@ class ResultTable:
             self.aborted = True
 
     def get_mark(self):
-        return self.mark if self.num_failed_tests == 0 or not self.params['ALL_OR_NOTHING'] else 0
+        if self.num_failed_tests == 0:
+            return self.mark
+        # Failed one or more tests
+        elif (self.num_failed_tests == self.num_failed_hidden_tests) and self.params['failhiddenonlyfract'] > 0:
+            return self.max_mark * self.params['failhiddenonlyfract']
+        elif not self.params['ALL_OR_NOTHING']:
+            return self.mark
+        else:
+            return 0
+ 
 
     @staticmethod
     def htmlise(s):
@@ -177,10 +252,14 @@ class ResultTable:
     def add_image(self, image_html, column_name, row_num):
         """Store the given html_image for later inclusion in the cell at the given row and given column.
            column_name is the name used for the column in the first (header) row.
+           It should be either Expected or Got (all we can handle in this code).
            row_num is the row number (0 origin, not including the header row).
         """
-        column_num = self.table[0].index(column_name)
-        self.images[column_num, row_num + 1].append(image_html)
+        try:
+            column_num = self.table[0].index(column_name)
+            self.images[column_num, row_num + 1].append(image_html)
+        except (IndexError, ValueError):
+            raise Exception(f"Can't insert '{column_name}' image into result table as the column does not exist.")
 
     def equal_strings(self, s1, s2):
         """ Compare the two strings s1 and s2 (expected and got respectively)

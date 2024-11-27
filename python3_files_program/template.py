@@ -273,7 +273,8 @@ process_template_params()
 test_cases = get_test_cases()
 process_global_params()
 
-if PARAMS['useanswerfortests']:
+# If using answer for tests and not a precheck where the question is using 'empty' precheck.
+if PARAMS['useanswerfortests'] and not (PARAMS['IS_PRECHECK'] and PARAMS['QUESTION_PRECHECK']==1):
     outcome, test_cases = get_expecteds_from_answer(PARAMS, test_cases)
 
 if test_cases:

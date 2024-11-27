@@ -21,6 +21,19 @@ class PyTester(Tester):
            own params - q.v.
         """
         super().__init__(params, testcases)  # Most of the task is handed by the generic tester
+        
+        # If the extra field is set to files, the first line of stdin must be filenames.
+        # Create all required files.
+        if params['extra'] == 'files':
+            if not params['IS_PRECHECK']:
+                for test in testcases:
+                    stdin_lines = test.stdin.splitlines()
+                    filename = stdin_lines[0].strip() if stdin_lines else ''
+                    if filename == '':
+                        raise Exception('The first line of stdin must be the filename')
+                    if filename not in params['protectedfiles']:
+                        with open(filename, 'w') as outfile:
+                            outfile.write(test.extra.rstrip() + '\n')
 
         # Py-dependent attributes
         self.task = pytask.PyTask(params)
@@ -110,7 +123,7 @@ class PyTester(Tester):
                         errors.append(passive)
 
         if len(errors) == 0 or self.params.get('forcepylint', False):
-            # Run precheckers (pylint, ruff, mypy)
+            # Run precheckers (pylint, mypy)
             try:
                 # Style-check the program without any test cases or other postlude added
                 errors += self.style_checker.style_errors()
@@ -220,7 +233,6 @@ class PyTester(Tester):
                 (r'(.*:)(\d+)(:\d+: [A-Z]\d+: .*line )(\d+)(.*)', [2, 4]),
                 (r'(.*:)(\d+)(:\d+: [A-Z]\d+: .*)', [2]),
                 (r'(.*:)(\d+)(: [a-zA-Z]*Warning.*)', [2]),
-                (r'(.*:)(\d+)(: \[.+\] .*)', [2]),
         ]
         output_lines = []
         for line in error.splitlines():
@@ -231,7 +243,7 @@ class PyTester(Tester):
                     for i, group in enumerate(match.groups(), 1):
                         if i in line_group_nums:
                             linenum = int(match.group(i))
-                            adjusted = max(0, linenum - self.prelude_length)
+                            adjusted = linenum - self.prelude_length
                             line += str(adjusted)
                         else:
                             line += group
@@ -243,14 +255,11 @@ class PyTester(Tester):
     def simplify_error(self, error):
         """Return a simplified version of a pylint error with Line <n> inserted in
            lieu of __source.py:<n><p>: Xnnnn
-           The underscores are optional because ruff behaves differently with
-           files whose names start with underscore, so we change the name to
-           source__.py for ruff checks.
         """
-        pattern = r'_?_?source_?_?.py:(-?\d+):( *\d+: *[A-Z]\d+:| \[.+\]) (.*)'
+        pattern = r'_?_?source.py:(\d+): *\d+: *[A-Z]\d+: (.*)'
         match = re.match(pattern, error)
         if match:
-            return f"Line {match.group(1)}: {match.group(3)}"
+            return f"Line {match.group(1)}: {match.group(2)}"
         else:
             return error
 
@@ -269,7 +278,7 @@ class PyTester(Tester):
                     if depth == 0:
                         main_call = student_lines[line]
                         if not re.match(r' *main\(\)', main_call):
-                            errors.append("Illegal call to main().\n" +
+                            errors.append(f"Illegal call to main().\n" +
                                 "main should not take any parameters and should not return anything.")
                         else:
                             student_lines[line] = main_call.replace(

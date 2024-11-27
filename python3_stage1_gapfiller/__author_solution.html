@@ -22,15 +22,15 @@
             code.classList.add('has-highlight');
         }
         
-        if (!solution_div.classList.contains('collapsing')) {
-            if (solution_div.getAttribute("expanded") === "true") {
+        if (!$(solution_div).hasClass('collapsing')) {
+            if ($(solution_div).attr("expanded") === "true") {
                 solution_link.innerHTML = "Show author's solution";
-                solution_div.style.display = "none";
-                solution_div.setAttribute("expanded", "false");
+                $(solution_div).hide(300);
+                $(solution_div).attr("expanded", "false");
             } else {
                 solution_link.innerHTML = "Hide author's solution";
-                solution_div.style.display = "block";
-                solution_div.setAttribute("expanded", "true");
+                $(solution_div).show(300);
+                $(solution_div).attr("expanded", "true");
             }
         }
     }

@@ -42,6 +42,7 @@ class Tester:
     def __init__(self, params, testcases):
         """Initialise the instance, given the test of template and global parameters plus
            all the testcases. Parameters required by this base class and all subclasses are:
+               'IS_PRECHECK': True if this run is a precheck only
                'STUDENT_ANSWER': code submitted by the student
                'SEPARATOR': the string to be used to separate tests in the output
                'ALL_OR_NOTHING: true if grading is all-or-nothing
@@ -252,7 +253,7 @@ class Tester:
         return []
 
     def get_all_images_html(self):
-        """Search the current directory for images named _image.*(Expected|Got)(\d+).png.
+        r"""Search the current directory for images named _image.*(Expected|Got)(\d+).png.
            For each such file construct an html img element with the data encoded
            in a dataurl.
            If we're running the sample answer, always return [] - images will be

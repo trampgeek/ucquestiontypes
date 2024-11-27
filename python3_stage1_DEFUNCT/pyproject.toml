@@ -1,0 +1,23 @@
+[tool.ruff]
+line-length = 100
+indent-width = 4
+output-format = 'pylint'
+
+[tool.ruff.lint.pylint]
+max-branches = 10
+
+[tool.ruff.lint] 
+select = ["A00", 
+          "ARG",  
+          "B015", "B018", "B020", 
+          "D1", 
+          "E1", "E5", "E701", "E702", "E703", "E711", "E722", 
+          "F", 
+          "ISC001",   
+          "N", 
+          "PLE", "PLR0912", "PLW0603", "PLW1501", "PLW3201", 
+          "S307",  
+          "RET503",  
+          ] 
+ignore = ["D105", "D107", "E117", "F401", "F841"] 
+preview = true 

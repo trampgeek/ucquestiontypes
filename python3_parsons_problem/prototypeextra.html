@@ -102,13 +102,9 @@ THE SOFTWARE.
     
     </style>
     <script>
-    var _tooltip = jQuery.fn.tooltip; // Cache this - see below.
-    </script>
-    <script>
     /* jshint esversion: 6 */
     //# sourceURL=ParsonsProbem.js
     require(['jquery', 'jqueryui'], function($, jqui) {
-        jQuery.fn.tooltip = _tooltip;  // Replace tooltip, broken by jqueryui load
     
         function turn_on_touch() {
             // Turn on touch functionality
@@ -353,7 +349,7 @@ THE SOFTWARE.
                 'lang': 'en'
             };
     
-            this.options = jQuery.extend({}, defaults, options);
+            this.options = $.extend({}, defaults, options);
             this.id_prefix = options.targetDivId + 'codeline';
             if (translations.hasOwnProperty(this.options.lang)) {
                 this.translations = translations[this.options.lang];

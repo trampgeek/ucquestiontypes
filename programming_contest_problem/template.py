@@ -125,7 +125,7 @@ class Results:
         else:
             return Results.make_data_url(s)
 
-    def add_row(self, test_num, test_result, stdin, expected, is_hidden):
+    def add_row(self, test_id, test_result, stdin, expected, is_hidden):
         """Add to this result table the given test result, given also the test stdin and expected output.
            is_hidden will be used by the CodeRunner renderer to control whether the user sees this row.
         """
@@ -134,7 +134,7 @@ class Results:
         if not is_correct and is_hidden:
             self.failed_hidden = True
         self.table.append([is_correct,
-                           test_num,
+                           test_id,
                            Results.table_cell(stdin),
                            Results.table_cell(expected),
                            Results.table_cell(test_result.output),
@@ -167,17 +167,20 @@ class JobRunner:
             zipfile.close()
             cwd = os.getcwd()
             os.chdir('Validator')
-            cpp_filenames = [filename for filename in os.listdir() if filename.endswith(".cpp")]
+            cpp_filenames = [filename for filename in os.listdir() if filename.endswith(".cpp")  or filename.endswith('.cc')]
             if os.path.isfile('build'):
                 build_result = subprocess.run(['/bin/bash', 'build'],
                                           encoding='utf-8',
                                           stdout=subprocess.PIPE,
                                           stderr=subprocess.STDOUT)
             elif len(cpp_filenames) == 1:
-                build_result = subprocess.run(['/usr/bin/g++', cpp_filenames[0], '-o', 'run'],
-                                          encoding='utf-8',
-                                          stdout=subprocess.PIPE,
-                                          stderr=subprocess.STDOUT)
+                with open('optionalhack.h', 'w') as outfile:
+                    outfile.write('#include <optional>\n')
+                build_result = subprocess.run(['/usr/bin/g++',
+                    cpp_filenames[0], '-std=c++17', '-include',  'optionalhack.h', '-o', 'run'],
+                    encoding='utf-8',
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT)
             else:
                 raise Exception("No build file for validator and no (single) cpp source file")
             os.chdir(cwd)
@@ -189,7 +192,7 @@ class JobRunner:
 
     def validator_check(self, test, got):
         """Check the answer using a supplied validator. """
-        _, stdin, expected = test
+        _, _, stdin, expected = test
         with open('test_stdin', 'w') as outfile:
             outfile.write(stdin)
         with open('test_expected', 'w') as outfile:
@@ -215,34 +218,49 @@ class JobRunner:
         else:
             raise ValidatorFailure(f"Validator failed with return code {validator_result.returncode}")
 
+    def lines_match(self, left, right):
+        """True iff the two strings left and right are equal or if there
+           is a defined float tolerance AND the two lines contains an equal number of
+           floats AND the floats match one-for-one within the given tolerance.
+        """
+        if left == right:
+            return True
+        elif self.params['float_tolerance'] is not None:
+            try:
+                tolerance = self.params['float_tolerance']
+                left_nums = [float(token) for token in left.split()]
+                right_nums = [float(token) for token in right.split()]
+                if len(left_nums) != len(right_nums):
+                    return False
+                for fl, fr in zip(left_nums, right_nums):
+                    if abs(fl - fr) > tolerance and abs((fl - fr) / fl) > tolerance:
+                        return False
+                return True
+            except ValueError:
+                return False
+        else:
+            return False
+
     def match(self, test, got):
         """True iff the expected output is correct.
            If there is a validator for this problem, it is used. Otherwise a simple
            comparison of expected and got is performed after stripping whitespace from
            the end of both and from the end of every line in both. Also, for
            each line, if the template_parameter float_tolerance is not None,
-           at attempt is made to compare non-matching lines as floats, within
+           at attempt is made to compare non-matching lines as 
+           sequences of space-separated floats, within
            the given tolerance. This is a gross hack. ** TODO ** fix me.
         """
         if self.validator:
             return self.validator_check(test, got)
         else:
-            _, _, expected = test
+            _, _, _, expected = test
             expected_lines = [line.rstrip() for line in expected.rstrip().splitlines()]
             got_lines = [line.rstrip() for line in got.rstrip().splitlines()]
             if len(expected_lines) != len(got_lines):
                 return False
             for left, right in zip(expected_lines, got_lines):
-                if left != right:
-                    if self.params['float_tolerance']:
-                        try:
-                            fl = float(left)
-                            fr = float(right)
-                            tol = self.params['float_tolerance']
-                            if abs(fl - fr) < tol or abs((fl - fr) / fl) < tol:
-                                continue
-                        except ValueError:
-                            return False
+                if not self.lines_match(left, right):
                     return False
             return True
 
@@ -251,7 +269,7 @@ class JobRunner:
            Namely all sample tests, then all tests listed in show_tests, then
            everything else.
         """
-        shows = [i for i in range(len(self.tests)) if self.tests[i][0]]  # All sample tests
+        shows = [i for i in range(len(self.tests)) if self.tests[i][1]]  # All sample tests
         shows += self.params['show_tests']
         rest = sorted(set(range(0, len(self.tests))) - set(shows))
         return shows + rest
@@ -322,7 +340,7 @@ class JobRunner:
                     #  (user's fault) or total time budget exceeded (our fault).
                     if timeout >= pertest_timeout:
                         state = State.timeout
-                        output = output.replace('Killed', '*** TIMEOUT ***')
+                        output = output.replace('Killed', f'*** Time limit ({timeout} secs) reached ***')
                     else:
                         state = State.time_budget_exceeded
                 elif e.returncode == (128 + 9): # Always true? Dunno!
@@ -363,7 +381,7 @@ class JobRunner:
         results = Results()
 
         for i in self.test_sequence():
-            is_sample, stdin, expected = self.tests[i]
+            test_name, is_sample, stdin, expected = self.tests[i]
             secs_remaining = end_time - process_cpu_time()
             pertest_timeout = self.params['pertest_timeout']
             test_result = self.run_one_test(stdin, secs_remaining, pertest_timeout)
@@ -372,7 +390,7 @@ class JobRunner:
             is_shown = is_sample or self.params['show_all_tests'] or i in self.params['show_tests'] or (
                 self.params['show_first_fail'] and test_result.state != State.correct)
             #test_result.output += f"\n[Job was run with {secs_remaining:.2f} secs remaining]"
-            results.add_row(i, test_result, stdin, expected, not is_shown)
+            results.add_row(test_name, test_result, stdin, expected, not is_shown)
             if test_result.state != State.correct:
                 break  # Lazy evaluation
         return results
@@ -408,11 +426,11 @@ class JobRunner:
 
         elif self.language == 'java':
             compile_result = subprocess.run(
-                ['javac', "-J-Xss64m", "-J-Xmx4g", filename],
+                ['javac', "-J-Xss64m", "-J-Xmx4g", "-Xlint:-unchecked", filename],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 universal_newlines=True)
-            self.exec_command = ["java", "-Xss64m", "-Xmx512m", basename]
+            self.exec_command = ["java", "-Xss64m", "-Xmx800m", basename]
             
         elif self.language == 'csharp':
             compile_result = subprocess.run(	
@@ -424,7 +442,7 @@ class JobRunner:
             
         else:  # Python doesn't need a compile phase
             compile_result = None
-            self.exec_command = ["python3", filename]
+            self.exec_command = [self.language, filename] # Either python2, python3, pypy3
 
         compile_output = compile_result.stdout if compile_result else ''
         return compile_output
@@ -435,7 +453,8 @@ class JobRunner:
            case the value self.exec_command has the command to run the executable.
            If there's any compile error, return the compiler output.
         """
-        language_extension_map = {'c': 'c', 'cpp': 'cpp', 'java': 'java', 'python3': 'py', 'csharp': 'cs'}
+        language_extension_map = {'c': 'c', 'cpp': 'cpp', 'java': 'java',
+            'python3': 'py', 'pypy3': 'py', 'python2': 'py2', 'csharp': 'cs', 'cs': 'cs'}
         if self.language not in language_extension_map.keys():
             raise Exception('Error in question. Unknown/unexpected language ({})'.format(self.language))
 
@@ -482,44 +501,53 @@ class JobRunner:
         return result
 
 
+def extension(fname):
+    """The filename extension"""
+    return fname.split('.')[-1]
+    
+    
+def test_name_from_file(fname):
+    """The file's basename without its extension"""
+    return '.'.join(fname.split('/')[-1].split('.')[:-1])
+    
+    
+def is_sample_file(folder, test_name):
+    """True if this is sample data"""
+    return 'sample' in folder or test_name.lower().startswith('samp')
+    
+def is_data_folder(folder):
+    """True if this is a folder likely to contain data files"""
+    allowed_folder_names = ['secret', 'sample', 'judge', 'judge data', 'sample data']
+    return folder == '' or any(folder.endswith(fname) for fname in allowed_folder_names)
+    
 def tests_and_timeout_from_zip(zipfilename):
     """Return a tuple consisting of the timeout value from the domjudge.ini file
-       (if present - None if not) and a list of (isSample, inputdata, outputdata)
+       (if present - None if not) and a list of (name, isSample, inputdata, outputdata)
        tuples of test data from the given zipfile. Test data must be either at the top level or
        must be in a folder called 'secret' or 'judge' or 'sample'.
     """
     tests = []
-    allowed_folder_names = ['secret', 'sample', 'judge', 'judge data', 'sample data']
     zf = ZipFile(zipfilename)
     filenames = zf.namelist()
-    folders = defaultdict(list)
-    for f in filenames:
-        path_bits = f.split('/')
-        folder = '/'.join(path_bits[:-1])
-        if (folder == '' or any(folder.endswith(fname) for fname in allowed_folder_names)) and any(f.endswith(ext) for ext in ['.in', '.out', '.ans']):
-            folders[folder].append(path_bits[-1])
 
-    for folder, names in folders.items():
-        infiles = sorted([f for f in names if f.endswith('.in')])
-        outfiles = sorted([f for f in names if (f.endswith('.out') or f.endswith('.ans'))])
-        infile_names = [f.split('.')[:-1] for f in infiles]
-        outfile_names = [f.split('.')[:-1] for f in outfiles]
+    # Process all test data to get a dictionary mapping from test name to 
+    # a dictionary of the input and output test data.
+    test_data = {}
+    for filename in filenames:
+        folder = '/'.join(filename.split('/')[:-1])
+        if is_data_folder(folder) and extension(filename) in ['in', 'out', 'ans']:
+            test_name = test_name_from_file(filename)
+            if test_name not in test_data:
+                test_data[test_name] = {'input': '', 'output': ''}
+            with zf.open(filename) as infile:
+                contents = infile.read().decode('utf-8')
+            if extension(filename) == 'in':
+                test_data[test_name]['input'] = contents
+            else:
+                test_data[test_name]['output'] = contents
     
-        if infile_names != outfile_names:
-            error = f"Set of .in files doesn't match set of .out/.ans  files in {folder}"
-            raise BadTestData(error)
-        else:
-            for i in range(len(infiles)):
-                if folder and not folder.endswith('/'):
-                    folder += '/'
-                with zf.open(f"{folder}{infiles[i]}") as infile:
-                    stdin = infile.read().decode('utf-8')
-                with zf.open(f"{folder}{outfiles[i]}") as infile:
-                    expected = infile.read().decode('utf-8')
-                is_sample = 'sample' in folder or infiles[i].lower().startswith('samp')
-                expected = expected.replace('\r', '')  # Windows line endings, grrr.
-                tests.append((is_sample, stdin, expected))
-                
+    tests = [(name, is_sample_file(folder, name), data['input'], data['output']) for name, data in test_data.items()]
+    
     timeout = None
     ini_files = [f for f in filenames if f.endswith('domjudge-problem.ini')]
     if (len(ini_files) == 1):
@@ -531,6 +559,7 @@ def tests_and_timeout_from_zip(zipfilename):
                     timeout = int(match_obj[1])
     return tests, timeout
     
+
 def get_zip_filename(params):
     """Try to find the ICPC problem archive zip, either via a specified
        filename in the params or by the presence of a single zip file

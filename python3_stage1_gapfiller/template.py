@@ -1,10 +1,11 @@
+""" Probably last updated on 10 Sep 2024. """
 import html
 import locale
 import json
 import os
 import re
 import sys
-import py_compile
+import ast
 
 from pytester import PyTester
 
@@ -35,7 +36,7 @@ KNOWN_PARAMS = {
     'norun': False,
     'nostylechecks': True,
     'notest': False,
-    '*parsegaps': True,
+    '*parsegaps': False,
     'precheckers': ['pylint'],
     '*prelude': '',
     '*proscribedbuiltins': ['exec', 'eval'],
@@ -56,10 +57,10 @@ KNOWN_PARAMS = {
             'onlyallow': []
         },
         'imp': {
-            'onlyallow': []
+            'onlyallow': []  
         },
         'importlib': {
-            'onlyallow': []
+            'onlyallow': []  
         },
         'os': {
             'disallow': ['system', '_exit', '_.*']
@@ -72,8 +73,10 @@ KNOWN_PARAMS = {
         },
     },
     'runextra': False,
+    '*showfeedbackwhenright': False,
     'stdinfromextra': False,
     '*strictwhitespace': True,
+    "*stripleadingwhitespace": False,
     'stripmain': False,
     'stripmainifpresent': False,
     'testisbash': False,
@@ -88,7 +91,6 @@ KNOWN_PARAMS = {
 }
 
 GLOBAL_ERRORS = []
-
 
 class TestCase:
     def __init__(self, dict_rep, test_code_html=None):
@@ -115,7 +117,7 @@ def process_template_params():
     global PARAMS, GLOBAL_ERRORS
     PARAMS = json.loads("""{{ QUESTION.parameters | json_encode | e('py') }}""")
     checktemplateparams = PARAMS.get('checktemplateparams', True)
-
+    
     # Check for parameters that aren't allowed
     if checktemplateparams:
         author_params = set(PARAMS.keys())
@@ -141,7 +143,7 @@ def process_template_params():
     if PARAMS['runextra']:
         PARAMS['extra'] = 'pretest'  # Legacy support
     if PARAMS['timeout'] < 2:
-        PARAMS['timeout'] = 2  # Allow 1 extra second freeboard
+        PARAMS['timeout'] = 2  # Allow 1 extra second freeboard 
 
 
 def update_test_cases(test_cases, outcome):
@@ -161,10 +163,10 @@ def update_test_cases(test_cases, outcome):
         outcome['prologuehtml'] = "No 'Got' column in result table from which to get testcase expecteds"
         test_cases = None
     except Exception as e:
-        outcome[
-            'prologuehtml'] = "Unexpected error ({}) extracting testcase expecteds from sample answer output".format(e)
+        outcome['prologuehtml'] = "Unexpected error ({}) extracting testcase expecteds from sample answer output".format(e)
         test_cases = None
     return test_cases
+
 
 
 def get_expecteds_from_answer(params, test_cases, ui_source, answer_field_values):
@@ -183,22 +185,21 @@ def get_expecteds_from_answer(params, test_cases, ui_source, answer_field_values
     tester = PyTester(new_params, answer_test_cases)
     outcome = tester.test_code()
     if 'prologuehtml' in outcome:
-        outcome['prologuehtml'] = "<h2>ERROR IN QUESTION'S SAMPLE ANSWER. PLEASE REPORT</h2>\n" + outcome[
-            'prologuehtml']
+        outcome['prologuehtml'] = "<h2>ERROR IN QUESTION'S SAMPLE ANSWER. PLEASE REPORT</h2>\n" + outcome['prologuehtml']
         return outcome, None
     else:
         return outcome, update_test_cases(test_cases, outcome)
-
-
+        
+  
 # ================= CODE TO DO GAPFILLER STUFF ===================
 def get_test_cases(ui_source, field_values):
     """Return an array of Test objects from the template parameter TESTCASES"""
     test_cases = []
     tests = json.loads("""{{ TESTCASES | json_encode | e('py') }}""")
-
+    
     for test in tests:
         # If gaps come from test cases then we fill student answer into gaps.
-
+        
         if ui_source == 'test0' and test['testcode'].strip() != '':
             test_code_html = insert_fields(htmlize(test['testcode']), field_values, highlight=True)
             test['testcode'] = insert_fields(test['testcode'], field_values)
@@ -207,7 +208,7 @@ def get_test_cases(ui_source, field_values):
             test_case = TestCase(test)
         test_cases.append(test_case)
     return test_cases
-
+    
 
 # Expand the given code by inserting the given fields into the
 # given code, after splitting it with the given regular expression.
@@ -219,7 +220,7 @@ def insert_fields(code, fields, splitter=r"\{\[.*?\]\}", highlight=False):
     if len(bits) != len(fields) + 1:
         GLOBAL_ERRORS.append("Richard has goofed. Please report")
         sys.exit()
-
+        
     prog = bits[0]
     i = 1
     for value in fields:
@@ -269,17 +270,11 @@ def fields_precheck(field_values):
             if bad in field:
                 errors.append(f"Field '{snip(field)}' contains the banned string '{bad}'")
         if PARAMS['parsegaps']:
-            with open('__gap.py', 'w') as outfile:
-                outfile.write(field)
             try:
-                py_compile.compile('__gap.py', doraise=True)
-            except Exception as e:
+                ast.parse(field)
+            except SyntaxError:
                 errors.append(f"Syntax error in field '{snip(field, 30)}'")
-            for filename in ['__gap.py', '__gap.pyc']:
-                try:
-                    os.remove(filename)
-                except FileNotFoundError:
-                    pass
+                
     for reqd in PARAMS['requiredsubstrings']:
         if not any(reqd in field for field in field_values):
             errors.append(f"Required substring '{reqd}' not found")
@@ -291,15 +286,45 @@ def htmlize(message):
     return '<pre>' + html.escape(message) + '</pre>' if message else ''
 
 
+def get_student_answer_fields():
+    """Return the sample answer"""
+    answer_json = """ {{ STUDENT_ANSWER | e('py') }}"""
+    answer = json.loads(answer_json)
+    if PARAMS['stripleadingwhitespace']:
+        answer = [field.lstrip() for field in answer]
+    return answer
+
+
+def get_answer():
+    """Return the sample answer"""
+    answer_json = """{{QUESTION.answer | e('py')}}""".strip()
+    try:
+        answer = json.loads(answer_json)
+        if len(answer) == 1:
+            answer = answer[0]  # Single gap - return contents not list.
+            if PARAMS['stripleadingwhitespace']:
+                answer = answer.lstrip()
+        else:
+            if PARAMS['stripleadingwhitespace']:
+                answer = [field.lstrip() for field in answer]
+    except:
+        answer = answer_json  # Shouldn't happen.
+    return answer
+    
+
 def process_global_params(ui_source, field_values):
     """Plug the globals STUDENT_ANSWER, IS_PRECHECK and QUESTION_PRECHECK into the global PARAMS """
     PARAMS['STUDENT_ANSWER'] = get_student_answer(ui_source, field_values) + '\n'
     PARAMS['SEPARATOR'] = "#<ab@17943918#@>#"
     PARAMS['IS_PRECHECK'] = "{{ IS_PRECHECK }}" == "1"
-    PARAMS['QUESTION_PRECHECK'] = {{QUESTION.precheck}}  # Type of precheck: 0 = None, 1 = Empty etc
-    PARAMS[
-        'ALL_OR_NOTHING'] = "{{ QUESTION.allornothing }}" == "1"  # Whether or not all-or-nothing grading is being used
+    PARAMS['QUESTION_PRECHECK'] = {{ QUESTION.precheck }} # Type of precheck: 0 = None, 1 = Empty etc
+    PARAMS['ALL_OR_NOTHING'] = "{{ QUESTION.allornothing }}" == "1" # Whether or not all-or-nothing grading is being used
     PARAMS['GLOBAL_EXTRA'] = """{{ QUESTION.globalextra | e('py') }}\n"""
+    answer = get_answer()
+    PARAMS['AUTHOR_ANSWER'] = ''
+    if answer:
+        with open("__author_solution.html") as file:
+            PARAMS['AUTHOR_ANSWER'] = (file.read().strip() % html.escape(str(answer)))
 
 
 # Get fields and ui params.
@@ -309,11 +334,12 @@ if ui_params and 'ui_source' in ui_params:
 else:
     ui_source = 'globalextra'
 
-field_values = json.loads(""" {{ STUDENT_ANSWER | e('py') }}""")
-answer_field_values = json.loads(""" {{ QUESTION.answer | e('py') }}""")
-
 process_template_params()
+
+field_values = get_student_answer_fields()
+answer_field_values = json.loads(""" {{ QUESTION.answer | e('py') }}""")
 test_cases = get_test_cases(ui_source, field_values)
+
 process_global_params(ui_source, field_values)
 
 if GLOBAL_ERRORS:
@@ -333,8 +359,20 @@ else:
     PARAMS['stylechecks'] = False  # For the future!
     if PARAMS['useanswerfortests']:
         outcome, test_cases = get_expecteds_from_answer(PARAMS, test_cases, ui_source, answer_field_values)
-
+    
     if test_cases:
         tester = PyTester(PARAMS, test_cases)
         outcome = tester.test_code()
+        feedback = ''
+        if outcome['fraction'] == 1 and PARAMS['showfeedbackwhenright'] and not (PARAMS['IS_PRECHECK']):
+            outcome['prologuehtml'] = '<pre class="ace-highlight-code" style="display:none"></pre>'  # Kick filter into life
+            feedback = PARAMS['AUTHOR_ANSWER']
+        if feedback:
+            if 'epiloguehtml' in outcome:
+                if outcome['epiloguehtml'].strip():
+                    outcome['epiloguehtml'] += '<br>'
+            else:
+                outcome['epiloguehtml'] = ''
+            outcome['epiloguehtml'] += f'<div style="background-color: #f4f4f4">{feedback}</div>'
+
 print(json.dumps(outcome))

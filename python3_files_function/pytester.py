@@ -27,14 +27,13 @@ class PyTester(Tester):
         if params['extra'] == 'files':
             if not params['IS_PRECHECK']:
                 for test in testcases:
-                    filename = test.stdin.splitlines()[0].strip()
+                    stdin_lines = test.stdin.splitlines()
+                    filename = stdin_lines[0].strip() if stdin_lines else ''
                     if filename == '':
                         raise Exception('The first line of stdin must be the filename')
                     if filename not in params['protectedfiles']:
                         with open(filename, 'w') as outfile:
-                            outfile.write(test.extra)
-        else:
-            raise Exception("extra should be 'files' for this question type!")
+                            outfile.write(test.extra.rstrip() + '\n')
 
         # Py-dependent attributes
         self.task = pytask.PyTask(params)
@@ -85,7 +84,6 @@ class PyTester(Tester):
             self.prelude_length += 1
             self.params['pylintoptions'].append("--disable=W0105")
         self.style_checker = StyleChecker(self.prelude, self.params['STUDENT_ANSWER'], self.params)
-
 
     def has_docstring(self):
         """True if the student answer has a docstring, which means that,
@@ -171,8 +169,6 @@ class PyTester(Tester):
                 '    print(f"{_mpl.pyplot.get_figlabels()}")'
             ]) + '\n'
         task = pytask.PyTask(self.params, code)
-        with open(f"WTF{randint(0,100)}.py", 'w') as outfile:
-            outfile.write(code)
         task.compile()
         captured_output, captured_error = task.run_code()
         return (captured_output + '\n' + captured_error).strip()
@@ -260,7 +256,7 @@ class PyTester(Tester):
         """Return a simplified version of a pylint error with Line <n> inserted in
            lieu of __source.py:<n><p>: Xnnnn
         """
-        pattern = f'__source.py:(\d+): *\d+: *[A-Z]\d+: (.*)'
+        pattern = r'_?_?source.py:(\d+): *\d+: *[A-Z]\d+: (.*)'
         match = re.match(pattern, error)
         if match:
             return f"Line {match.group(1)}: {match.group(2)}"
@@ -281,7 +277,7 @@ class PyTester(Tester):
                 for (line, depth) in main_calls:
                     if depth == 0:
                         main_call = student_lines[line]
-                        if not re.match(' *main\(\)', main_call):
+                        if not re.match(r' *main\(\)', main_call):
                             errors.append(f"Illegal call to main().\n" +
                                 "main should not take any parameters and should not return anything.")
                         else:

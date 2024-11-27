@@ -27,14 +27,13 @@ class PyTester(Tester):
         if params['extra'] == 'files':
             if not params['IS_PRECHECK']:
                 for test in testcases:
-                    filename = test.stdin.splitlines()[0].strip()
+                    stdin_lines = test.stdin.splitlines()
+                    filename = stdin_lines[0].strip() if stdin_lines else ''
                     if filename == '':
                         raise Exception('The first line of stdin must be the filename')
                     if filename not in params['protectedfiles']:
                         with open(filename, 'w') as outfile:
-                            outfile.write(test.extra)
-        else:
-            raise Exception("extra should be 'files' for this question type!")
+                            outfile.write(test.extra.rstrip() + '\n')
 
         # Py-dependent attributes
         self.task = pytask.PyTask(params)
@@ -259,7 +258,7 @@ class PyTester(Tester):
         """Return a simplified version of a pylint error with Line <n> inserted in
            lieu of __source.py:<n><p>: Xnnnn
         """
-        pattern = f'__source.py:(\d+): *\d+: *[A-Z]\d+: (.*)'
+        pattern = r'_?_?source.py:(\d+): *\d+: *[A-Z]\d+: (.*)'
         match = re.match(pattern, error)
         if match:
             return f"Line {match.group(1)}: {match.group(2)}"
@@ -280,7 +279,7 @@ class PyTester(Tester):
                 for (line, depth) in main_calls:
                     if depth == 0:
                         main_call = student_lines[line]
-                        if not re.match(' *main\(\)', main_call):
+                        if not re.match(r' *main\(\)', main_call):
                             errors.append(f"Illegal call to main().\n" +
                                 "main should not take any parameters and should not return anything.")
                         else:
