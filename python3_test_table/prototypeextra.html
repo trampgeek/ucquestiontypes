@@ -49,13 +49,18 @@ tr.cr-test-table-row {
         this.HEADERS = ['Test', 'Result'];
         this.NUM_DATA_COLUMNS = 2;  // Future expansion possible to multiple columns?
 
-        // The HTML UI will have attempted to restore all the UI values into the test table
-        // but will have failed, as the table hadn't been built at that time. The leftovers
+        // The HTML UI may already have attempted to restore all the UI values into the test table
+        // and have failed, as the table hadn't been built at that time. In this case, the leftovers
         // will have been saved in the outer div, so we have to pick them up from there during
-        // the build.
+        // the build. Otherwise, just use the original value of the textarea.
+        // I'm not sure what determines the order of events here as it varies with version of
+        // CodeRunner and/or version of Moodle!
         this.outerDiv = document.getElementById("qtype-coderunner-outer-div-___textareaId___");
-        const dataLeftovers = this.outerDiv.getAttribute('data-leftovers');
-        this.dataToLoad = dataLeftovers ? JSON.parse(dataLeftovers) : {};
+        let data = this.outerDiv.getAttribute('data-leftovers');
+        if (data === null) { // Don't have leftovers. Use original text area contents after all.
+            data = document.getElementById("___textareaId___").value;
+        }
+        this.dataToLoad = data ? JSON.parse(data) : {};
         const sampleName = 'test_table_col0'; // One of the values in dataToLoad.
         this.numRowsToLoad = this.dataToLoad.hasOwnProperty(sampleName) ? this.dataToLoad[sampleName].length : 0;
         this.numRows = Math.max(1, this.numRowsToLoad);
