@@ -8,7 +8,7 @@ import random
 from pytester import PyTester
 
 STANDARD_PYLINT_OPTIONS = ['--disable=trailing-whitespace,superfluous-parens,' + 
-                      'too-few-public-methods,consider-using-f-string,' + 
+                      'too-few-public-methods,consider-using-f-string,useless-return,' + 
                       'unbalanced-tuple-unpacking,too-many-statements,' + 
                       'consider-using-enumerate,simplifiable-if-statement,' + 
                       'consider-iterating-dictionary,trailing-newlines,no-else-return,' + 
@@ -18,7 +18,7 @@ STANDARD_PYLINT_OPTIONS = ['--disable=trailing-whitespace,superfluous-parens,' +
 	                  'consider-using-in,useless-object-inheritance,unnecessary-pass,' + 
 	                  'reimported,wrong-import-order,wrong-import-position,ungrouped-imports,' + 
                       'consider-using-set-comprehension,no-else-raise,unnecessary-lambda-assignment,' + 
-                      'unspecified-encoding,use-dict-literal,,consider-using-with,' + 
+                      'unspecified-encoding,use-dict-literal,consider-using-with,consider-using-min-builtin,' + 
                       'duplicate-string-formatting-argument,consider-using-dict-items,' + 
                       'consider-using-max-builtin,use-a-generator,unidiomatic-typecheck', 
                       '--good-names=i,j,k,n,s,c,_' 
@@ -30,12 +30,14 @@ locale.setlocale(locale.LC_ALL, 'C.UTF-8')
 KNOWN_PARAMS = {
     'abortonerror': True,
     'allowglobals': False,
-    'banglobalcode': True,
     'allownestedfunctions': False,
+    'banfunctionredefinitions': True,
+    'banglobalcode': True,
     'checktemplateparams': True,
     'dpi': 65,
     'echostandardinput': True,
     'extra': 'None',
+    'failhiddenonlyfract': 0,
     'floattolerance': None,
     'forcepylint': False,
     'globalextra': 'None',
@@ -44,20 +46,22 @@ KNOWN_PARAMS = {
     'isfunction': True,
     'localprechecks': True,
     'maxfunctionlength': 30,
+    'maxreturndepth': None,
+    'maxprechecks': None,
     'maxnumconstants': 4,
     'maxoutputbytes': 10000,
-    'maxprechecks': None,
     'maxstringlength': 2000,
     'norun': False,
     'nostylechecks': False,
     'notest': False,
     'parsonsproblemthreshold': None, # The number of checks before parsons' problem displayed
-    'precheckers': ['pylint'],
+    'precheckers': ['ruff'],
     'prelude': '',
     'proscribedbuiltins': ['exec', 'eval'],
     'proscribedfunctions': [],
-    'proscribedconstructs': ["goto"],
+    'proscribedconstructs': ["goto", "while_with_else"],
     'proscribedsubstrings': [],
+    'protectedfiles': [],
     'pylintoptions': [],
     'pylintmatplotlib': False,
     'requiredconstructs': [],
@@ -91,6 +95,8 @@ KNOWN_PARAMS = {
             'disallow': ['_.*']
         },
     },
+    'resultcolumns': [], # If not specified, use question's resultcolumns value. See below.
+    'ruffoptions': [],
     'runextra': False,
     'showfeedbackwhenright': False,
     'stdinfromextra': False,
@@ -146,12 +152,6 @@ def process_template_params():
         else:
             PARAMS[param_name] = default;
 
-    result_columns = """{{QUESTION.resultcolumns}}""".strip();
-    if result_columns == '':
-        PARAMS['resultcolumns'] = [['Test', 'testcode'], ['Input', 'stdin'], ['Expected', 'expected'], ['Got', 'got']]
-    else:
-        PARAMS['resultcolumns'] = json.loads(result_columns);
-    
     if PARAMS['extra'] == 'stdin':
         PARAMS['stdinfromextra'] = True
     if PARAMS['runextra']:
@@ -168,6 +168,15 @@ def process_template_params():
             PARAMS['precheckers'] = []
     if PARAMS['testisbash']:
         print("testisbash is not implemented for Python")
+        
+    # We use the template parameter for resultcolumns if non-empty.
+    # Otherwise use the value from the question, or an equivalent default if that's empty too.
+    q_result_columns = """{{QUESTION.resultcolumns}}""".strip();
+    if PARAMS['resultcolumns'] == []:
+        if q_result_columns:
+            PARAMS['resultcolumns'] = json.loads(q_result_columns);
+        else:
+            PARAMS['resultcolumns'] = [['Test', 'testcode'], ['Input', 'stdin'], ['Expected', 'expected'], ['Got', 'got']]
 
 
 def get_test_cases():
@@ -254,6 +263,7 @@ def get_expecteds_from_answer(params, test_cases):
     new_params['IS_PRECHECK'] = False
     new_params['nostylechecks'] = True
     new_params['STUDENT_ANSWER'] = get_answer()
+    new_params['resultcolumns'] = [['Test', 'testcode'], ['Got', 'got']]  # Ensure we have a Got column.
     new_params['running_sample_answer'] = True
     tester = PyTester(new_params, test_cases)
     outcome = tester.test_code()

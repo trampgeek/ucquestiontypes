@@ -59,7 +59,7 @@ class ResultTable:
             if field == 'extra' and self.is_file_question:
                 format = '%h'  # See format_extra function.
             else:
-                format = format if format else '%s'
+                format = format[0] if format else '%s'
             self.column_formats[field] = format
             self.column_formats_by_hdr[hdr] = format
 

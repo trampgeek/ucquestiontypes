@@ -180,6 +180,9 @@ class StyleChecker:
         if num_constants > self.params['maxnumconstants']:
             errors.append("You may not use more than " + str(self.params['maxnumconstants']) + " constants.")
 
+        if self.params.get('banfunctionredefinitions', True):
+            errors += self.find_redefinitions()
+
         # (mct63) Check if anything restricted is being imported.
         if 'restrictedmodules' in self.params:
             restricted = self.params['restrictedmodules']
@@ -531,6 +534,39 @@ class StyleChecker:
         visitor = MyVisitor()
         visitor.visit(self.tree)
         return global_errors
+
+
+    def find_redefinitions(self):
+        """Check the code for any cases where a variable has the same name as the
+           function in which it is being used.
+        """
+        redefinitions = []
+        class RedefinitionChecker(ast.NodeVisitor):
+            def __init__(self):
+                self.scopes = []
+                self.function_names = {}  # Map from name to line number of def
+
+            def visit_FunctionDef(self, node):
+                self.function_names[node.name] = node.lineno  # Record the function name and line no.
+                self.scopes.append(set())
+                self.generic_visit(node)  # Visit the body
+                self.scopes.pop()
+
+            def visit_Assign(self, node):
+                if self.scopes:
+                    current_scope = self.scopes[-1]
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            if target.id in self.function_names and target.id not in current_scope:
+                                def_linenum = self.function_names[target.id]
+                                redefinitions.append(f"SourceFile:{target.lineno}:0 FUNC_REDEF: Variable '{target.id}' is the name of a function defined at line {def_linenum}.")
+                            current_scope.add(target.id) # Prevent repetitions of the error.
+                self.generic_visit(node)
+
+        visitor = RedefinitionChecker()
+        visitor.visit(self.tree)
+        return redefinitions
+
 
 
     def is_main_check(self, node):

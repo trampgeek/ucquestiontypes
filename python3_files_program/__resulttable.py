@@ -59,7 +59,7 @@ class ResultTable:
             if field == 'extra' and self.is_file_question:
                 format = '%h'  # See format_extra function.
             else:
-                format = format if format else '%s'
+                format = format[0] if format else '%s'
             self.column_formats[field] = format
             self.column_formats_by_hdr[hdr] = format
 
@@ -255,8 +255,11 @@ class ResultTable:
            It should be either Expected or Got (all we can handle in this code).
            row_num is the row number (0 origin, not including the header row).
         """
-        column_num = self.table[0].index(column_name)
-        self.images[column_num, row_num + 1].append(image_html)
+        try:
+            column_num = self.table[0].index(column_name)
+            self.images[column_num, row_num + 1].append(image_html)
+        except (IndexError, ValueError):
+            raise Exception(f"Can't insert '{column_name}' image into result table as the column does not exist.")
 
     def equal_strings(self, s1, s2):
         """ Compare the two strings s1 and s2 (expected and got respectively)

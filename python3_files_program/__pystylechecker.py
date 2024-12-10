@@ -37,34 +37,45 @@ class StyleChecker:
         env = os.environ.copy()
         env['HOME'] = os.getcwd()
         pylint_opts = self.params.get('pylintoptions',[])
+        ruff_opts = self.params.get('ruffoptions', [])
+
         precheckers = self.params.get('precheckers', ['pylint'])
         result = ''
 
-        if 'pylint' in precheckers:
-            try:  # Run pylint
-                cmd = f'{sys.executable} -m pylint ' + ' '.join(pylint_opts) + ' __source.py'
-                result = subprocess.check_output(cmd,
-                                             stderr=subprocess.STDOUT,
-                                             universal_newlines=True,
-                                             env=env,
-                                             shell=True)
-            except Exception as e:
-                result = e.output
-                
-            else:
-                # (mct63) Abort if there are any comments containing 'pylint:'.
-                try:
-                    tokenizer = tokenize.tokenize(BytesIO(self.student_answer.encode('utf-8')).readline)
-                    for token_type, token_text, *_ in tokenizer:
-                        if token_type == tokenize.COMMENT and 'pylint:' in token_text:
-                            errors.append("Comments can not include 'pylint:'")
-                            break
-        
-                except Exception:
-                    errors.append("Something went wrong while parsing comments. Report this.")
+        # First try checking with pylint and/or ruff.
+        # Ruff treats filenames starting with underscore as private, changing its behaviour.
+        # So we create a temporary file source.py then delete it again.
+        linters = [
+            ('pylint', f'{sys.executable} -m pylint ' + ' '.join(pylint_opts) + ' __source.py', 'pylint:'),
+            ('ruff', f'cp __source.py source.py;/usr/local/bin/ruff check --quiet {" ".join(ruff_opts)} source.py; rm source.py', 'noqa'),
+        ]
 
-            if "Using config file" in result:
-                result = '\n'.join(result.splitlines()[1:]).split()
+        for linter, cmd, disable_keyword in linters:
+            if linter in precheckers:
+                try:  # Run pylint or ruff
+                    result = subprocess.check_output(cmd,
+                                                stderr=subprocess.STDOUT,
+                                                universal_newlines=True,
+                                                env=env,
+                                                shell=True)
+                except Exception as e:
+                    result = e.output
+                    
+                else:
+                    # (mct63) Abort if there are any comments disabling the linter'.
+                    try:
+                        tokenizer = tokenize.tokenize(BytesIO(self.student_answer.encode('utf-8')).readline)
+                        for token_type, token_text, *_ in tokenizer:
+                            if token_type == tokenize.COMMENT and disable_keyword in token_text:
+                                errors.append(f"Comments can not include '{disable_keyword}'")
+                                break
+            
+                    except Exception:
+                        errors.append("Something went wrong while parsing comments. Report this.")
+
+                if "Using config file" in result:
+                    result = '\n'.join(result.splitlines()[1:]).split()
+
 
         if result == '' and 'mypy' in precheckers:
             code_to_check = 'from typing import List as list, Dict as dict, Tuple as tuple, Set as set, Any\n' + code_to_check
@@ -169,6 +180,9 @@ class StyleChecker:
         if num_constants > self.params['maxnumconstants']:
             errors.append("You may not use more than " + str(self.params['maxnumconstants']) + " constants.")
 
+        if self.params.get('banfunctionredefinitions', True):
+            errors += self.find_redefinitions()
+
         # (mct63) Check if anything restricted is being imported.
         if 'restrictedmodules' in self.params:
             restricted = self.params['restrictedmodules']
@@ -182,6 +196,13 @@ class StyleChecker:
                                     name in restricted[import_name].get('disallow', [])):
                                 errors.append("Your program should not import '{}' from '{}'.".format(name, import_name))
 
+        if 'maxreturndepth' in self.params and (max_depth := self.params['maxreturndepth']) is not None:
+            bad_returns = self.find_nested_returns(max_depth)
+            if bad_returns:
+                if max_depth == 1:
+                    errors.append("This question does not allow return statements within loops, if statements etc")
+                else:
+                    errors.append(f"This question does not allow return statements to be indented more than '{max_depth}' levels")
         return errors
 
     def find_all_imports(self):
@@ -273,6 +294,48 @@ class StyleChecker:
         visitor = FuncFinder()
         visitor.visit(self.tree)
         return defined
+    
+
+    def nested_returns(self):
+        """Return a dictionary in which the keys are nesting depth (0, 1, 2, ..9) and the
+           values are counts of the number of return statements at that level. Nesting
+           level is deemed to increase with def, if, for, while, try, except and with
+           statements.
+        """
+        counts = {i: 0 for i in range(10)}
+        depth = 0
+        class ReturnFinder(ast.NodeVisitor):
+            def visit_body(self, node):
+                nonlocal depth
+                depth += 1
+                self.generic_visit(node)
+                depth -= 1
+            def visit_For(self, node):
+                self.visit_body(node)
+            def visit_While(self, node):
+                self.visit_body(node)
+            def visit_FunctionDef(self, node):
+                self.visit_body(node)
+            def visit_If(self, node):
+                self.visit_body(node)
+            def visit_Try(self, node):
+                self.visit_body(node)
+            def visit_TryExcept(self, node):
+                self.visit_body(node)
+            def visit_TryFinally(self, node):
+                self.visit_body(node)
+            def visit_ExceptHandler(self, node):
+                self.visit_body(node)
+            def visit_With(self, node):
+                self.visit_body(node)
+            def visit_Return(self, node):
+                nonlocal depth
+                counts[depth] += 1
+                self.generic_visit(node)
+
+        visitor = ReturnFinder()
+        visitor.visit(self.tree)
+        return counts
 
 
     def constructs_used(self):
@@ -473,6 +536,39 @@ class StyleChecker:
         return global_errors
 
 
+    def find_redefinitions(self):
+        """Check the code for any cases where a variable has the same name as the
+           function in which it is being used.
+        """
+        redefinitions = []
+        class RedefinitionChecker(ast.NodeVisitor):
+            def __init__(self):
+                self.scopes = []
+                self.function_names = {}  # Map from name to line number of def
+
+            def visit_FunctionDef(self, node):
+                self.function_names[node.name] = node.lineno  # Record the function name and line no.
+                self.scopes.append(set())
+                self.generic_visit(node)  # Visit the body
+                self.scopes.pop()
+
+            def visit_Assign(self, node):
+                if self.scopes:
+                    current_scope = self.scopes[-1]
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            if target.id in self.function_names and target.id not in current_scope:
+                                def_linenum = self.function_names[target.id]
+                                redefinitions.append(f"SourceFile:{target.lineno}:0 FUNC_REDEF: Variable '{target.id}' is the name of a function defined at line {def_linenum}.")
+                            current_scope.add(target.id) # Prevent repetitions of the error.
+                self.generic_visit(node)
+
+        visitor = RedefinitionChecker()
+        visitor.visit(self.tree)
+        return redefinitions
+
+
+
     def is_main_check(self, node):
         """Return True iff the given node is a check if the current module is '__main__'.
            Just checks if both the strings '__name__' and '__main__' are present in the line.
@@ -501,3 +597,11 @@ class StyleChecker:
         visitor = MyVisitor()
         visitor.visit(self.tree)
         return bad_funcs
+    
+
+    def find_nested_returns(self, max_depth):
+        """Return a count of the number of return statements
+           at a nesting depth in excess of max_depth.
+        """
+        returns = self.nested_returns()
+        return sum(returns[depth] for depth in range(max_depth + 1, 10))

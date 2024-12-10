@@ -39,7 +39,7 @@
         
         table.sst th {
             font-weight: bold;
-            border: 2px solid black;
+            border: 3px solid black;
         }
         
         table.sst th.cr-variables-header {
@@ -54,23 +54,23 @@
         }
         
         table.sst td.cr-bottom {
-            border-bottom: 2px solid black;
+            border-bottom: 3px solid black;
         }
         
         table.sst .cr-output-col,
         table.sst .cr-linenumber-col,
         table.sst .cr-return-row,
         table.sst td.cr-separator {
-            border-right: 2px solid black;
-            border-left: 2px solid black;
+            border-right: 3px solid black;
+            border-left: 3px solid black;
         }
         
         table.sst td.cr-last-col {
-            border-right: 2px solid black;
+            border-right: 3px solid black;
         }
         
         table.sst td.cr-variable-name {
-            border-bottom: 2px solid black;
+            border-bottom: 3px solid black;
         }
         
         /* Input styles */
@@ -210,7 +210,7 @@
         <td class="cr-variable-col${bottom}${last_col}"><input id="___textareaId___-cr-sst-var-${i}-${j}" ${col_width_style} class="coderunner-ui-element cr-variable cr-undefined" name="variable_value" value="${value}"></td>`;
                     }
                     if (has_output) {
-                        bottom = (params.return_width && i == params.num_rows - 1) ? ' cr-bottom' : '';
+                        bottom = (params.output_width && i == params.num_rows) ? ' cr-bottom' : '';
                         value = getValue(data, 'output', i - 1)
                         table_html += `
         <td class="cr-blank cr-separator">
