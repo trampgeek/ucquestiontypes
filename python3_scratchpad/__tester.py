@@ -258,7 +258,7 @@ class Tester:
            in a dataurl.
            If we're running the sample answer, always return [] - images will be
            picked up when we run the actual answer.
-           Returns a list of tuples (img_elements, column_name, row_number) where
+           Returns a list of tuples (filename, image_data_b64, img_html, column_name, row_number) where
            column_name is either 'Expected' or 'Got', defining in which result table
            column the image belongs and row number is the row (0-origin, excluding
            the header row).
@@ -275,11 +275,10 @@ class Tester:
             match = re.match(r'_image[^.]*\.(Expected|Got)\.(\d+).png', filename)
             if match:
                 image_data = get_jpeg_b64(filename)
-                img_template = '<img{} style="margin:3px;border:1px solid black" src="data:image/jpeg;base64,{}">'
-                img_html = img_template.format(width_spec, image_data)
+                img_html = f'<img style="margin:3px;border:1px solid black" src="{filename}">'
                 column = match.group(1)   # Name of column
                 row = int(match.group(2)) # 0-origin row number
-                images.append((img_html, column, row))
+                images.append((filename, image_data, img_html, column, row))
         return images
 
     def test_code(self):
@@ -291,6 +290,7 @@ class Tester:
             mark, errors = self.compile_and_run()
 
         outcome = {"fraction": mark}
+        files = {}
 
         error_text = '\n'.join(errors)
         # TODO - check if error line numbers are still being corrected in C and matlab
@@ -310,8 +310,9 @@ class Tester:
         epilogue = ''
         images = self.get_all_images_html()
         if images:
-            for (image, column, row) in images:
-                self.result_table.add_image(image, column, row)
+            for (filename, image_b64, image_html, column, row) in images:
+                self.result_table.add_image(image_html, column, row)
+                files[filename] = image_b64
         outcome['columnformats'] = self.result_table.get_column_formats()
 
         if len(self.result_table.table) > 1:
@@ -335,6 +336,10 @@ class Tester:
 
         if epilogue:
             outcome['epiloguehtml'] = epilogue
+            
+        if files:
+            outcome['files'] = files
+            
         return outcome
 
     @staticmethod

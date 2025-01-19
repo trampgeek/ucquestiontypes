@@ -311,7 +311,8 @@ class JobRunner:
         state = State.correct  # In this context, 'correct' means the run didn't break
         cmd = ' '.join(self.exec_command)
         fsizelimit = self.params['fsizelimit']
-        bash_cmd = f"ulimit -s unlimited; ulimit -c 0; ulimit -v {MEMLIMIT}; ulimit -t {timeout}; ulimit -f {fsizelimit}; {cmd}"
+        limit_memory = '' if self.language == 'java' else f"ulimit -v {MEMLIMIT}; "; 
+        bash_cmd = f"ulimit -s unlimited; ulimit -c 0; {{limit_memory}}ulimit -t {timeout}; ulimit -f {fsizelimit}; {cmd}"
         try:
             with open('__stdout__.txt', 'w') as output:
                 with open('__stderr__.txt', 'w') as err_output:
