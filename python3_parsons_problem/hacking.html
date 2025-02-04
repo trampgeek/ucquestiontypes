@@ -1,0 +1,699 @@
+<!--
+Code for use within the CodeRunner HTML UI to implement a Parsons
+Problem question type.
+
+Much of this code was original derived from the jsparson project by Ihantola
+and Karavirta, though it has now mostly been rewritten to work within the
+CodeRunner question type framework and to avoid use of jQuery, which was
+fundamental to the jsparson implementation. The css is largely unchanged,
+however.
+
+-- Richard Lobb, 2021, 2025.
+
+-->
+<style>
+    .CR-parsons-authoring {
+        display: none;
+    }
+
+    .CR-parsons-error {
+        display: none;
+        background-color: yellow;
+    }
+
+    .source-code,
+    target-code {
+        font-size: 90%;
+        font-family: monospace;
+        width: 100%;
+    }
+
+    .target-code {
+        display: none;
+    }
+
+    .sortable-code {
+        position: static;
+        padding-left: 0px;
+        margin-left: 2%;
+        float: left;
+        width: 94%;
+
+        max-width: {{ code_width }};
+    }
+
+    .sortable-code ul {
+        font-size: 90%;
+        font-family: monospace;
+        list-style: none;
+        background-color: #cbcff7;
+        padding-bottom: 26px;
+        padding-left: 0;
+        margin-left: 0;
+        border: 1px solid #efefff;
+    }
+
+    .sortable-code ul:empty {
+        padding-bottom: 30px;
+    }
+
+    .sortable-code li,
+    .sortable-code li:before,
+    .sortable-code li:after {
+        box-sizing: content-box;
+    }
+
+    ul.output {
+        background-color: #FFA;
+    }
+
+    [draggable="true"] {
+        cursor: move;
+        user-select: none;
+    }
+
+    .sortable-code.drag-over {
+        border-color: #000;
+    }
+
+    .sortable-code li {
+        border-radius: 10px;
+        background-color: white;
+        border: 1px solid lightgray;
+        padding: 4px;
+        padding-left: 8px;
+        margin-top: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        cursor: move;
+    }
+
+    .sortable-code li:hover {
+        overflow: visible;
+    }
+
+    .dragging {
+        opacity: 0.5;
+    }
+
+    .insertion-marker {
+        height: 35px;
+        background-color: inherit;
+        border: 1px dashed rgb(185, 34, 34);
+        margin: 5px 0;
+        pointer-events: none;
+    }
+
+</style>
+
+<script>
+    require([], function () {
+        'use strict';
+
+        const MAX_INDENT = 7;
+        const trimRegexp = /^\s*(.*?)\s*$/;
+
+        class ParsonsCodeLine {
+            static next_id = 0;
+
+            constructor(codestring, widget, allow_indent) {
+                this.widget = widget;
+                this.code = codestring ? codestring.replace(/#distractor\s*$/, "")
+                    .replace(trimRegexp, "$1")
+                    .replace(/\\n/g, "\n") : "";
+                this.indent = 0;
+
+                if (codestring && allow_indent) {
+                    this.indent = Math.min((codestring.length - codestring.replace(/^\s+/, "").length) / 4, MAX_INDENT);
+                }
+                this.id = widget.id_prefix + ParsonsCodeLine.next_id++;
+            }
+        }
+
+        class ParsonsWidget {
+            constructor(sourceUlId, targetUlId, sourceTaId, targetTaId) {
+                this.x_indent = 35;
+                this.sourceUlId = sourceUlId;
+                this.targetUlId = targetUlId;
+                this.sourceTaId = sourceTaId;
+                this.targetTaId = targetTaId;
+                this.id_prefix = targetUlId + 'codeline';
+                this.MAX_INDENT = 7;
+                this.loadFromTa(sourceTaId, sourceUlId);
+                this.loadFromTa(targetTaId, targetUlId);
+                this.manageDrags();
+            }
+
+            // Parse a problem definition given as a string and returns
+            // a list of ParsonCodeLines.
+            // Creates line objects out of each codeline.
+            // Fields in line objects:
+            //   code: a string of the code, may include newline characters and
+            //     thus in fact represents a block of consecutive lines
+            //   indent: indentation level.
+            parseCode(lines, allow_indent) {
+                return lines
+                    .map(line => new ParsonsCodeLine(line, this, allow_indent))
+                    .filter(line => line.code.trim().length > 0);
+            }
+
+            // Load the given target ULId
+            // with the code lines from the text area with the given ID (fromTaId).
+            loadFromTa(fromTaId, toUlId) {
+                const fromTa = document.getElementById(fromTaId);
+                const lines = this.parseCode(fromTa.value.split("\n"), true);
+                const htmlLines = this.codeLinesToHTML(lines);
+                const ul = document.getElementById(toUlId);
+                ul.innerHTML = htmlLines.join('\n');
+            }
+
+            // Calculate the indent level based on the offset of the LHS of the dragged element from its 
+            // target drop zone's left edge.
+            calcIndent(leftDiff) {
+                const indent = Math.max(0, Math.round(leftDiff / this.x_indent));
+                return indent;
+            }
+
+            setHTMLIndent(element, indent) {
+                element.style.marginLeft = this.cssIndent(indent);
+            }
+
+            cssIndent(indent) {
+                return `${this.x_indent * Math.min(this.MAX_INDENT, indent)}px`;
+            }
+
+            codeLineToHTML(codeline) {
+                const indent = codeline.indent ? `margin-left: ${this.x_indent * codeline.indent}px` : '';
+                return `<li id="${codeline.id}" class="ace-static-highlight lang-py" style="${indent}">${codeline.code}</li>`;
+            }
+
+            // Return an array of HTML strings representing the given code lines.
+            codeLinesToHTML(lines) {
+                return lines.map(line => this.codeLineToHTML(line));
+            }
+
+            syncToTextareas() {
+                const sourceList = document.getElementById(this.sourceUlId);
+                const targetList = document.getElementById(this.targetUlId);
+                document.getElementById('CR-parsons-source-ta-___textareaId___').value = this.getCodeString(sourceList);
+                document.getElementById('CR-parsons-target-ta-___textareaId___').value = this.getCodeString(targetList);
+            }
+
+            getCodeString(ulElement) {
+                return Array.from(ulElement.children)
+                    .map(item => {
+                        const indent = parseInt(item.style.marginLeft || 0, 10) / this.x_indent;
+                        return ' '.repeat(indent * 4) + item.textContent.trim();
+                    })
+                    .join('\n');
+            }
+
+            // Find the point at which to insert the dragged element in the given list
+            // of the list items, based on the y-coordinate of the mouse/touch and the bounding
+            // rectangle of the list.
+            // @return [indentOnly, insertBefore] where indentOnly is true if no insertion
+            // is required, only indentation. insertBefore is the list item before which the
+            // dragged element should be inserted, null if it should be appended to the end.
+            findInsertionPoint(draggedElement, items, y, rect) {
+                let insertBefore = null;
+                let indentOnly = false;
+                for (let i = 0; i < items.length; i++) {
+                    let item = items[i];
+                    if (item.classList.contains('insertion-marker')) {
+                        continue;
+                    }
+
+                    const box = item.getBoundingClientRect();
+                    // Check if item is the dragged item and mouse is somwwhere between the centre of
+                    // the item below and the centre of the item above. In that case we only want to indent.
+                    if (item.classList.contains('dragging')) {
+                        let lowBound = box.top;
+                        let highBound = box.bottom;
+                        if (i < items.length - 1) {
+                            let nextBox = items[i + 1].getBoundingClientRect();
+                            highBound = (nextBox.bottom + nextBox.top) / 2;
+                        }
+                        if (i > 0) {
+                            let prevBox = items[i - 1].getBoundingClientRect();
+                            lowBound = (prevBox.top + prevBox.bottom) / 2;
+                        }
+                        if (y > lowBound && y < highBound) {
+                            indentOnly = true;
+                            break;
+                        }
+                    }
+
+                    if (y < box.top + box.height / 2) {
+                        insertBefore = item;
+                        break;
+                    }
+                }
+                return [indentOnly, insertBefore];
+            }
+
+            manageDrags() {
+                const that = this;
+                const targetElement = document.getElementById(this.targetUlId);
+                const sourceElement = document.getElementById(this.sourceUlId);
+                let draggedElement = null;
+                let dragOffsetX = 0;
+                let dragOffsetY = 0;
+                let indentOnly = false;
+                this.clone = null;
+
+                [sourceElement, targetElement].forEach(element => {
+                    // Existing drag event listeners...
+                    element.addEventListener('dragstart', (e) => {
+                        draggedElement = e.target; // The element being dragged.
+                        const rect = element.getBoundingClientRect();
+                        const leftMargin = parseFloat(getComputedStyle(draggedElement).marginLeft);
+                        dragOffsetX = e.clientX - rect.left - leftMargin;  // Save the offset
+                        draggedElement.classList.add('dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                        indentOnly = false;
+                    });
+
+                    element.addEventListener('dragleave', (e) => {
+                        // Remove the marker unless this is a false dragleave resulting
+                        // from dragging over a child element.
+                        if (!element.contains(e.relatedTarget)) {  // If not dragging over a child element...
+                            const marker = element.querySelector('.insertion-marker');
+                            if (marker) {
+                                marker.remove();
+                            }
+                        }
+                    });
+
+                    element.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+
+                        // Find insertion point
+                        const rect = element.getBoundingClientRect();
+                        const items = [...element.children];
+
+                        // Find where to insert
+                        let indent = 0;
+                        const [indentOnly, insertBefore] = that.findInsertionPoint(draggedElement, items, e.clientY, rect);
+
+                        // Calculate indent level
+                        if (element === sourceElement) {
+                            indent = 0;
+                        } else {
+                            const leftx = e.clientX - dragOffsetX;
+                            indent = that.calcIndent(leftx - rect.left);
+                        }
+
+                        let marker = element.querySelector('.insertion-marker');
+                        if (indentOnly) {
+                            if (marker) {
+                                marker.remove();
+                            }
+                        } else {
+                            if (!marker) {
+                                marker = document.createElement('div');
+                                marker.className = 'insertion-marker';
+                            }
+
+                            that.setHTMLIndent(marker, indent);
+                            if (insertBefore) {
+                                element.insertBefore(marker, insertBefore);
+                            } else {
+                                element.appendChild(marker);
+                            }
+                        }
+                    });
+
+                    element.addEventListener('dragend', (e) => {
+                        if (draggedElement) {
+                            draggedElement.classList.remove('dragging');
+                            draggedElement = null;
+                        }
+                        const marker = element.querySelector('.insertion-marker');
+                        if (marker) {
+                            marker.remove();
+                        }
+                    });
+
+                    element.addEventListener('drop', (e) => {
+                        e.preventDefault()
+                        const rect = element.getBoundingClientRect();
+                        const leftx = e.clientX - dragOffsetX;
+                        const indent = element === sourceElement ? 0 : that.calcIndent(leftx - rect.left);
+                        that.setHTMLIndent(draggedElement, indent);
+
+                        if (indentOnly) {
+                            return;
+                        }
+                        // Insert the dragged element at the correct position
+                        const marker = element.querySelector('.insertion-marker');
+                        if (marker) {
+                            element.insertBefore(draggedElement, marker);
+                        } else {
+                            element.appendChild(draggedElement);
+                        }
+                    });
+
+                    // Touchstart handler
+                    element.addEventListener('touchstart', function (e) {
+                        e.preventDefault();
+                        const touch = e.touches[0];
+                        let target = touch.target;
+                        // Find the draggable element
+                        while (target && target !== element && !target.draggable) {
+                            target = target.parentElement;
+                        }
+                        if (target && target.draggable) {
+                            draggedElement = target;
+                            const rect = draggedElement.getBoundingClientRect();
+                            const leftMargin = parseFloat(getComputedStyle(draggedElement).marginLeft);
+                            dragOffsetX = touch.clientX - rect.left;
+                            dragOffsetY = touch.clientY - rect.top;
+                            draggedElement.classList.add('dragging');
+                            // Create a clone for visual feedback
+                            that.clone = draggedElement.cloneNode(true);
+                            that.clone.id = 'drag-clone';
+
+                            // Copy styles from the original element.
+                            const computedStyles = window.getComputedStyle(draggedElement);
+                            for (let style of computedStyles) {
+                                that.clone.style[style] = computedStyles.getPropertyValue(style);
+                            }
+
+                            // Tweak the ones we need to change.
+                            that.clone.style.position = 'fixed';
+                            that.clone.style.left = `${rect.left}px`;
+                            that.clone.style.top = `${touch.clientY - dragOffsetY}px`;
+                            that.clone.style.opacity = '0.6';
+                            that.clone.style.pointerEvents = 'none';
+                            document.body.appendChild(that.clone);
+                        }
+                    });
+                });
+
+                // Touchmove handler
+                document.addEventListener('touchmove', function (e) {
+                    if (!draggedElement || !that.clone) return;
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    // Update clone position
+                    that.clone.style.left = `${touch.clientX - dragOffsetX}px`;
+                    that.clone.style.top = `${touch.clientY - dragOffsetY}px`;
+                    // Determine current drop zone
+                    const elements = [sourceElement, targetElement];
+                    let currentElement = null;
+                    for (const el of elements) {
+                        const rect = el.getBoundingClientRect();
+                        if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
+                            touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+                            currentElement = el;
+                            break;
+                        }
+                    }
+                    if (!currentElement) {
+                        elements.forEach(el => {
+                            const marker = el.querySelector('.insertion-marker');
+                            if (marker) marker.remove();
+                        });
+                        return;
+                    }
+                    // Calculate insertion point and indent
+                    const rect = currentElement.getBoundingClientRect();
+                    const items = [...currentElement.children].filter(child => child !== that.clone);
+                    const [indentOnly, insertBefore] = that.findInsertionPoint(draggedElement, items, touch.clientY, rect);
+                    // Calculate indent
+                    let indent = currentElement === sourceElement ? 0 : that.calcIndent(touch.clientX - dragOffsetX - rect.left);
+                    // Update insertion marker
+                    let marker = currentElement.querySelector('.insertion-marker');
+                    if (indentOnly) {
+                        if (marker) {
+                            marker.remove();
+                        }
+                    } else {
+                        if (!marker) {
+                            marker = document.createElement('div');
+                            marker.className = 'insertion-marker';
+                        }
+                        that.setHTMLIndent(marker, indent);
+                        if (insertBefore) {
+                            currentElement.insertBefore(marker, insertBefore);
+                        } else {
+                            currentElement.appendChild(marker);
+                        }
+                    }
+                }, { passive: false });
+
+                // Touchend handler
+                document.addEventListener('touchend', function (e) {
+                    if (!draggedElement) return;
+                    e.preventDefault();
+                    // Remove clone and markers
+                    if (that.clone) {
+                        that.clone.remove();
+                        that.clone = null;
+                    }
+                    draggedElement.classList.remove('dragging');
+                    const touch = e.changedTouches[0];
+                    // Determine current drop zone
+                    const elements = [sourceElement, targetElement];
+                    let currentElement = null;
+                    for (const el of elements) {
+                        const rect = el.getBoundingClientRect();
+                        if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
+                            touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+                            currentElement = el;
+                            break;
+                        }
+                    }
+                    // Remove all markers
+                    elements.forEach(el => {
+                        const marker = el.querySelector('.insertion-marker');
+                        if (marker) marker.remove();
+                    });
+                    if (currentElement) {
+                        // Calculate indent and insert
+                        const rect = currentElement.getBoundingClientRect();
+                        const leftx = touch.clientX - dragOffsetX;
+                        const indent = currentElement === sourceElement ? 0 : that.calcIndent(leftx - rect.left);
+                        that.setHTMLIndent(draggedElement, indent);
+                        // Find insertion point based on last touch position
+                        const items = [...currentElement.children].filter(child => child !== draggedElement);
+                        const [indentOnly, insertBefore] = that.findInsertionPoint(draggedElement, items, touch.clientY, rect);
+                        if (!indentOnly) {
+                            if (insertBefore) {
+                                currentElement.insertBefore(draggedElement, insertBefore);
+                            } else {
+                                currentElement.appendChild(draggedElement);
+                            }
+                        }
+                        that.syncToTextareas();
+                    }
+                    draggedElement = null;
+                    dragOffsetX = 0;
+                    indentOnly = false;
+                });
+
+                const makeItemsDraggable = (element) => {
+                    Array.from(element.children).forEach(item => {
+                        item.draggable = true;
+                    });
+                };
+
+                makeItemsDraggable(sourceElement);
+                makeItemsDraggable(targetElement);
+            }
+        }
+
+
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // Check that the target (aka answer) textarea contains only lines
+        // that are present in the source textarea. Turns on the error
+        // message (yellow highlighted) if not.
+        // Also rebuilds the source field for the answer to contain all unused
+        // lines in the target.
+        // Works only in the question authoring context.
+        function checkAnswer() {
+            const sourceTa = document.getElementById('CR-parsons-source-ta-id_answerpreload');
+            const targetTa = document.getElementById('CR-parsons-target-ta-id_answer');
+            const errorPara = document.getElementById('CR-parsons-answer-error-id_answer');
+            const sourceLines = sourceTa.value.trim().split("\n");
+            const answerLines = targetTa.value.trim().split("\n");
+
+            errorPara.style.display = 'none';
+            let used = [];
+
+            for (const answerLine of answerLines) {
+                if (!sourceLines.some((srcLine, index) => {
+                    if (used.includes(index)) return false;
+                    if (srcLine.trim() === answerLine.trim()) {
+                        used.push(index);
+                        return true;
+                    }
+                    return false;
+                })) {
+                    errorPara.style.display = 'inline';
+                }
+            }
+
+            const answerUnused = document.getElementById('CR-parsons-source-ta-id_answer');
+            answerUnused.value = sourceLines
+                .filter((_, index) => !used.includes(index))
+                .join('\n');
+        }
+
+        function setupMutationObservers(sourceTextArea, targetTextArea, sourceUlId, targetUlId, parson) {
+            // In the live question we monitor changes in the source or drop zone
+            // and update the corresponding CodeRunner textareas when anything changes.
+            const sortables = document.getElementById("CR-parsons-sortables-___textareaId___");
+            const sourceUl = document.getElementById(sourceUlId);
+            const targetUl = document.getElementById(targetUlId);
+
+            function syncToCoderunner() {
+                sourceTextArea.value = parson.getCodeString(sourceUl);
+                targetTextArea.value = parson.getCodeString(targetUl);
+            }
+
+            const observer = new MutationObserver(syncToCoderunner);
+            const observerOptions = {
+                childList: true,
+                attributes: true,
+                characterData: false,
+                subtree: true,
+                attributeFilter: ['style'],
+                attributeOldValue: false,
+                characterDataOldValue: false
+            };
+            observer.observe(sortables, observerOptions);
+            if (window.ace && window.applyAceHighlighting) {
+                window.applyAceHighlighting(window.ace, sourceUl);
+                window.applyAceHighlighting(window.ace, targetUl);
+            }
+        }
+
+        function setupAuthoring(sourceTextArea, targetTextArea) {
+            document.querySelectorAll('.sortable-code').forEach(el => el.style.display = 'none');
+
+            const isPreload = sourceTextArea.closest('.preloadanswer') !== null;
+            if (isPreload) {
+                document.getElementById("CR-parsons-preload-authoring-div-___textareaId___").style.display = "block";
+                targetTextArea.value = '';
+
+                document.getElementById("CR-parsons-shuffle-___textareaId___").onclick = function () {
+                    const lines = sourceTextArea.value.trim().split('\n');
+                    shuffleArray(lines);
+                    sourceTextArea.value = lines.join('\n');
+                };
+
+                document.getElementById("CR-unindent-___textareaId___").onclick = function () {
+                    const lines = sourceTextArea.value.trim().split('\n').map(l => l.trim());
+                    sourceTextArea.value = lines.join('\n');
+                };
+
+                sourceTextArea.addEventListener('input', checkAnswer);
+            } else {
+                document.getElementById("CR-parsons-answer-authoring-div-___textareaId___").style.display = "block";
+                targetTextArea.addEventListener('input', checkAnswer);
+            }
+            checkAnswer();
+        }
+
+
+        function doAceHighlighting(parentQuestionDiv) {
+            if (window.ace) {
+                const highlight = window.ace.require("ace/ext/static_highlight");
+                const codeElements = parentQuestionDiv.getElementsByClassName('ace-static-highlight');
+
+                for (let i = 0; i < codeElements.length; i++) {
+                    let element = codeElements[i];
+
+                    const mode = "ace/mode/python";
+                    if (element.hasAttribute("lang")) {
+                        mode = "ace/mode/" + element.getAttribute("lang");
+                    }
+
+                    highlight(element, {
+                        mode: mode,
+                        showGutter: false,
+                    }, function (highlighted) {
+                        const fontSize = "14px";
+                        if (element.hasAttribute("font-size")) {
+                            fontSize = element.getAttribute("font-size");
+                        }
+                        // The class ace_static_highlight (with underscores)
+                        // is not to be confused with ace-static-highlight.
+                        // The latter is generated by the Ace highlighter.
+                        element.getElementsByClassName('ace_static_highlight')[0].style['font-size'] = fontSize;
+                    });
+                }
+            }
+        }
+
+        function startUp() {
+            const sourceUlId = 'CR-parsons-source-ul-___textareaId___';
+            const targetUlId = 'CR-parsons-target-ul-___textareaId___';
+            const sourceTaId = 'CR-parsons-source-ta-___textareaId___';
+            const targetTaId = 'CR-parsons-target-ta-___textareaId___';
+            const sourceTextArea = document.getElementById(sourceTaId);
+            const targetTextArea = document.getElementById(targetTaId);
+            const parentQuestionDiv = sourceTextArea.closest('div.que');
+            const isQuestion = parentQuestionDiv !== null;
+
+            const parson = new ParsonsWidget(sourceUlId, targetUlId, sourceTaId, targetTaId);
+
+            if (!isQuestion) {
+                setupAuthoring(sourceTextArea, targetTextArea);
+            }
+            setupMutationObservers(sourceTextArea, targetTextArea, sourceUlId, targetUlId, parson);
+            doAceHighlighting(parentQuestionDiv);
+        }
+
+        startUp();
+    });
+</script>
+
+<!-- HTML structure remains unchanged -->
+<html>
+
+<body>
+    <div id="CR-parsons-answer-authoring-div-___textareaId___" class="CR-parsons-authoring">
+        <h4>Answer:</h4>
+        <p id="CR-parsons-answer-error-___textareaId___" class="CR-parsons-error">
+            The answer contains line(s) not available in the preload!
+        </p>
+        <textarea id="CR-parsons-target-ta-___textareaId___" name='CR-parsons-target' class="coderunner-ui-element"
+            rows="8"></textarea>
+    </div>
+
+    <div id="CR-parsons-preload-authoring-div-___textareaId___" class="CR-parsons-authoring">
+        <h4>Drag-able code lines:</h4>
+        <textarea id="CR-parsons-source-ta-___textareaId___" name='CR-parsons-source'
+            class="coderunner-ui-element CR-parsons-answer-edit" rows="8"></textarea>
+        <div id="CR-parsons-button-div-___textareaId___">
+            <button id="CR-parsons-shuffle-___textareaId___" type="button">Shuffle</button>
+            <button id="CR-unindent-___textareaId___" type="button">Remove indentation</button>
+        </div>
+    </div>
+
+    <div id="CR-parsons-sortables-___textareaId___">
+        <div id="CR-parsons-source-div-___textareaId___" class="sortable-code">
+            <p>Drag from here</p>
+            <ul id="CR-parsons-source-ul-___textareaId___"></ul>
+        </div>
+
+        <div id="CR-parsons-target-div-___textareaId___" class="sortable-code">
+            <p>Construct solution here</p>
+            <ul id="CR-parsons-target-ul-___textareaId___" class="output"></ul>
+        </div>
+
+        <div style="clear:both;"></div>
+    </div>
+</body>
+
+</html>

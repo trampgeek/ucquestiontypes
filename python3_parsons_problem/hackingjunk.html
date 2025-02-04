@@ -2,6 +2,12 @@
 Code for use within the CodeRunner HTML UI to implement a Parsons
 Problem question type.
 
+Much of this code was original derived from the jsparson project by Ihantola
+and Karavirta, though it has now mostly been rewritten to work within the
+CodeRunner question type framework and to avoid use of jQuery, which was
+fundamental to the jsparson implementation. The css is largely unchanged,
+however.
+
 -- Richard Lobb, 2021, 2025.
 
 -->
@@ -86,6 +92,13 @@ Problem question type.
         pointer-events: none;
     }
 
+    .dragging-ghost {
+        background: white;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        width: 100%;
+        max-width: 300px;
+    }
 </style>
 
 <script>
@@ -98,17 +111,15 @@ Problem question type.
             TRIM_REGEXP: /^\s*(.*?)\s*$/,
         };
 
-        // Class to represent a single line of code in the Parsons problem.
         class CodeLine {
             static nextId = 0;
 
             constructor(codestring, widget, allowIndent) {
                 this.code = this.parseCode(codestring);
-                this.indent = allowIndent ? this.codeLineIndent(codestring) : 0;
+                this.indent = allowIndent ? this.calculateIndent(codestring) : 0;
                 this.id = `${widget.id_prefix}codeline${CodeLine.nextId++}`;
             }
 
-            // Remove trailing whitespace and a trailing #distractor comment.
             parseCode(codestring) {
                 if (!codestring) return '';
                 return codestring
@@ -117,33 +128,27 @@ Problem question type.
                     .replace(/\\n/g, '\n');
             }
 
-            // Calculate the indent level of the line of code.
-            codeLineIndent(codestring) {
+            calculateIndent(codestring) {
                 const spaces = codestring.length - codestring.replace(/^\s+/, '').length;
                 return Math.min(Math.floor(spaces / 4), CONSTANTS.MAX_INDENT);
             }
 
-            // Convert the code line to HTML for display in the UL element.
             toHTML(xIndent) {
                 const indent = this.indent ? `margin-left: ${xIndent * this.indent}px` : '';
                 return `<li id="${this.id}" class="ace-static-highlight lang-py" style="${indent}">${this.code}</li>`;
             }
         }
 
-        // Class to manage drag and drop operations for the Parsons problem.
-        // The DnD API is used for desktop browsers and touch events for touch devices.
         class DragDropManager {
             constructor(sourceElement, targetElement, parsonsWidget) {
-                this.sourceElement = sourceElement;  // The UL element containing the draggable items (source).
-                this.targetElement = targetElement;  // The UL element where the solution is constructed (target).
-                this.parsonsWidget = parsonsWidget;  // Link back to the ParsonsWidget object.
-                this.draggedElement = null;          // The element currently being dragged
-                this.dragOffsetX = 0;                // Offset of the pointer from the left edge of the dragged element.
-                this.dragOffsetY = 0;                // Offset of the pointer from the top edge of the dragged element.     
-                this.clone = null;                   // The clone of the dragged element when dragging with touch.
-                this.indentOnly = false;             // True if the dragged element is being indented, not moved.
-                this.touchId = null;                 // The touch identifier for the current touch event.
-
+                this.sourceElement = sourceElement;
+                this.targetElement = targetElement;
+                this.parsonsWidget = parsonsWidget;
+                this.draggedElement = null;
+                this.dragOffsetX = 0;
+                this.dragOffsetY = 0;
+                this.clone = null;
+                this.indentOnly = false;
                 this.setupEventListeners();
             }
 
@@ -161,11 +166,9 @@ Problem question type.
                 document.addEventListener('touchend', this.handleTouchEnd.bind(this));
             }
 
-            // =============== Event handlers for mouse-based drag and drop ===============
-
             handleDragStart(e) {
-                this.draggedElement = e.target;   // The element being dragged
-                const element = e.currentTarget;  // The UL element containing the dragged element.
+                this.draggedElement = e.target; // The element being dragged
+                const element = e.currentTarget;
                 const rect = element.getBoundingClientRect();
                 const leftMargin = parseFloat(getComputedStyle(this.draggedElement).marginLeft);
                 this.dragOffsetX = e.clientX - rect.left - leftMargin;
@@ -177,7 +180,8 @@ Problem question type.
             handleDragOver(e) {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
-                const element = e.currentTarget; // The UL element being dragged over.
+                
+                const element = e.currentTarget;
                 const rect = element.getBoundingClientRect();
                 const [indentOnly, insertBefore] = this.findInsertionPoint(
                     [...element.children], // Candidate items in the targets UL list.
@@ -188,10 +192,9 @@ Problem question type.
 
                 let marker = element.querySelector('.insertion-marker');
                 if (indentOnly && marker) {
-                    marker.remove(); // Suppress the marker if we're only indenting.
+                    marker.remove();
                 } else if (!indentOnly) {
-                    const indent = this.calculateIndent(e.clientX, element)
-                    this.updateInsertionMarker(element, marker, insertBefore, indent);
+                    this.updateInsertionMarker(element, marker, insertBefore, this.calculateIndent(e, rect));
                 }
             }
 
@@ -208,10 +211,12 @@ Problem question type.
             }
 
             handleDragEnd(e) {
-                // Clean up after the drag operation.
-                // Called on both source and destination elements in the DnD API.
                 this.draggedElement.classList.remove('dragging');
                 this.draggedElement = null;
+                if (this.clone) {
+                    this.clone.remove();
+                    this.clone = null;
+                }
                 const marker = e.currentTarget.querySelector('.insertion-marker');
                 if (marker) {
                     marker.remove();
@@ -219,10 +224,10 @@ Problem question type.
             }
 
             handleDrop(e) {
-                // The dragged element has been dropped on the current target.
                 e.preventDefault();
                 const element = e.currentTarget;
-                this.setDraggedElementIndent(e.clientX, element);
+                const rect = element.getBoundingClientRect();
+                this.setDraggedElementIndent(e, rect);
                 if (!this.indentOnly) {
                     const marker = element.querySelector('.insertion-marker');
                     if (marker) {
@@ -234,17 +239,8 @@ Problem question type.
                 this.parsonsWidget.syncToTextareas();
             }
 
-            // =============== Event handlers for touch-based drag and drop ===============
-            // Messier because we have to handle the touch events on the document, not the elements.
-            // Also, we have to create a clone of the dragged element for visual feedback and
-            // manage the movement of that clone.
-            // There is also the possibility of multiple touches, but we process only single
-            // finger touch events.
-
             handleTouchStart(e) {
                 e.preventDefault();
-                if (e.touches.length !== 1) return;
-                this.touchId = e.touches[0].identifier;
                 const touch = e.touches[0];
                 const element = e.currentTarget;
                 let target = touch.target;
@@ -255,8 +251,9 @@ Problem question type.
                 if (target && target.draggable) {
                     this.draggedElement = target;
                     const rect = this.draggedElement.getBoundingClientRect();
-                    this.dragOffsetX = touch.clientX - rect.x;
-                    this.dragOffsetY = touch.clientY - rect.y;
+                    const leftMargin = parseFloat(getComputedStyle(this.draggedElement).marginLeft);
+                    this.dragOffsetX = touch.clientX - rect.left;
+                    this.dragOffsetY = touch.clientY - rect.top;
                     this.draggedElement.classList.add('dragging');
 
                     // Create a clone for visual feedback, with styles copied from the original element.
@@ -269,8 +266,7 @@ Problem question type.
 
                     // Tweak the ones we need to change.
                     this.clone.style.position = 'fixed';
-                    this.clone.style.margin = '0';
-                    this.clone.style.left = `${rect.x}px`;
+                    this.clone.style.left = `${rect.left}px`;
                     this.clone.style.top = `${touch.clientY - this.dragOffsetY}px`;
                     this.clone.style.opacity = '0.6';
                     this.clone.style.pointerEvents = 'none';
@@ -279,12 +275,10 @@ Problem question type.
             }
 
             handleTouchMove(e) {
-                // This is the messiest part of the touch-based drag and drop.
-                if (!this.draggedElement || !this.clone) return; // This isn't for me.
-                const touch = Array.from(e.touches).find(t => t.identifier === this.touchId);
-                if (!touch) return; // This isn't the touch we're interested in.
-
+                if (!this.draggedElement || !this.clone) return;
                 e.preventDefault();
+                const touch = e.touches[0];
+                let marker = null;
 
                 // Update clone position.
                 this.clone.style.left = `${touch.clientX - this.dragOffsetX}px`;
@@ -312,32 +306,31 @@ Problem question type.
 
                 this.indentOnly = indentOnly;
 
-                const marker = currentElement.querySelector('.insertion-marker');
+                marker = e.currentTarget.querySelector('.insertion-marker');
                 if (indentOnly && marker) {
                     marker.remove();
                 } else if (!indentOnly) {
-                    const indent = this.calculateIndent(touch.clientX, currentElement);
-                    this.updateInsertionMarker(currentElement, marker, insertBefore, indent);
+                    this.updateInsertionMarker(element, marker, insertBefore, this.calculateIndent(touch, rect));
                 }
             }
 
             handleTouchEnd(e) {
-                // This is equivalent to drop in the DnD API.
-                const touch = Array.from(e.changedTouches).find(t => t.identifier === this.touchId);
-                if (!touch || !this.draggedElement) return;
+                if (!this.draggedElement) return;
 
                 e.preventDefault();
                 this.draggedElement.classList.remove('dragging');
+                this.draggedElement = null;
                 if (this.clone) {
                     this.clone.remove();
                     this.clone = null;
                 }
                 
+                const touch = e.changedTouches[0];
                 const currentElement = this.findDropZone(touch);
 
                 if (currentElement) {
                     const rect = currentElement.getBoundingClientRect();
-                    this.setDraggedElementIndent(touch.clientX, currentElement);
+                    this.setDraggedElementIndent(touch, rect);
                     if (!this.indentOnly) {
                         const marker = currentElement.querySelector('.insertion-marker');
                         if (marker) {
@@ -360,8 +353,6 @@ Problem question type.
                 this.indentOnly = false;
                 this.dragOffsetX = 0;
             }
-
-            // =============== Utility methods ===============
 
 
             // Find the point at which to insert the dragged element in the given list
@@ -422,22 +413,20 @@ Problem question type.
                 return currentElement;
             }
 
-            calculateIndent(clientX, droppedOnElement) {
-                if (droppedOnElement === this.sourceElement) {
+            calculateIndent(e, rect) {
+                if (e.currentTarget === this.sourceElement) {
                     return 0;
                 }
-                const leftx = clientX - this.dragOffsetX;
-                const rect = droppedOnElement.getBoundingClientRect();
+                const leftx = e.clientX - this.dragOffsetX;
                 return Math.max(0, Math.round((leftx - rect.left) / CONSTANTS.X_INDENT));
             }
 
-            setDraggedElementIndent(clientX, element) {
-                this.draggedElement.style.marginLeft = this.calculateIndent(clientX, element) * CONSTANTS.X_INDENT + 'px';
+            setDraggedElementIndent(e, rect) {
+                this.draggedElement.style.marginLeft = this.calculateIndent(e, rect) * CONSTANTS.X_INDENT + 'px';
             }
 
-            updateInsertionMarker(targetElement, marker, insertBefore, indent) {
+            updateInsertionMarker(element, marker, insertBefore, indent) {
                 if (!marker) {
-                    // No marker yet, so create one.
                     marker = document.createElement('div');
                     marker.className = 'insertion-marker';
                 }
@@ -445,14 +434,13 @@ Problem question type.
                 marker.style.marginLeft = `${CONSTANTS.X_INDENT * indent}px`;
                 
                 if (insertBefore) {
-                    targetElement.insertBefore(marker, insertBefore);
+                    element.insertBefore(marker, insertBefore);
                 } else {
-                    targetElement.appendChild(marker);
+                    element.appendChild(marker);
                 }
             }
         }
 
-        //  ===== The ParsonsWidget class manages the Parsons problem UI =====
         class ParsonsWidget {
             constructor(sourceUlId, targetUlId, sourceTaId, targetTaId) {
                 this.config = {
@@ -470,7 +458,7 @@ Problem question type.
                 );
                 
                 this.loadFromTextareas();
-                // this.setupMutationObservers(); // Not currently used.
+                this.setupMutationObservers();
                 this.makeItemsDraggable();
                 const sourceTextArea = document.getElementById(sourceTaId);
                 const parentQuestionDiv = sourceTextArea.closest('div.que');
@@ -497,8 +485,6 @@ Problem question type.
                 return lines.map(line => line.toHTML(CONSTANTS.X_INDENT));
             }
 
-            // This code was part of the previous implementation. It seems unnecessary but I'm keeping it for now,
-            // though it's not currently used.
             setupMutationObservers() {
                 const observer = new MutationObserver(() => this.syncToTextareas());
                 observer.observe(document.getElementById(`CR-parsons-sortables-___textareaId___`), {
@@ -509,7 +495,6 @@ Problem question type.
                 });
             }
 
-            // Synchronise the contents of the UL elements with the corresponding textareas.
             syncToTextareas() {
                 ['source', 'target'].forEach(type => {
                     const list = document.getElementById(this.config[`${type}UlId`]);
@@ -518,7 +503,6 @@ Problem question type.
                 });
             }
 
-            // Convert the list of code lines in the UL element to a program string.
             getCodeString(ulElement) {
                 return Array.from(ulElement.children)
                     .map(item => {
@@ -528,7 +512,6 @@ Problem question type.
                     .join('\n');
             }
 
-            // Make the items in the source and target UL elements draggable.
             makeItemsDraggable() {
                 [this.config.sourceUlId, this.config.targetUlId].forEach(id => {
                     const element = document.getElementById(id);
@@ -606,9 +589,7 @@ Problem question type.
         }
 
 
-        // The authoring page is tricky. The answer preload displays a list of lines that will be
-        // displayed in the source area. The author can shuffle these lines and remove indentation.
-        // The answer area displays the solution constructed by the author.
+
         function setupAuthoring(sourceTextArea, targetTextArea) {
             document.querySelectorAll('.sortable-code').forEach(el => el.style.display = 'none');
 
@@ -653,6 +634,8 @@ Problem question type.
             } else {    
                 setupAuthoring(sourceTextArea, targetTextArea);
             }
+
+            
         }
 
         startUp();
