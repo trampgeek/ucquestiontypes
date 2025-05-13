@@ -1,0 +1,381 @@
+<textarea class="coderunner-ui-element"
+     id="___textareaId___-ace_field1" name="answer_code"
+     spellcheck="false" data-params="" data-lang="python3">
+</textarea>
+<script>
+var rows = document.getElementById('___textareaId___').rows;
+document.getElementById("___textareaId___-ace_field1").rows = rows;
+</script>
+
+<a role="button" id="___textareaId___-a-test-panel" style="font-family: sans-serif;padding-left:5px;box-shadow:none;color:#0f6cbf;">▶ Scratchpad</a>
+<fieldset id="___textareaId___-id_customtestpanel" style="display:none">
+<div style="border: 1px solid gray;background-color:#ffc">
+<textarea class="coderunner-ui-element"
+     id="___textareaId___-ace_field2" name="test_code"
+     spellcheck="false" rows="4" data-params="" data-lang="python3">
+</textarea>
+<div>
+<button id="___textareaId___-run-button" type="button" style='margin:5px;'>Run</button>
+<input type="checkbox" class="coderunner-ui-element" name='qtype_cr-prefix-answer' id="___textareaId___-prefix-answer">
+<label for="___textareaId___-prefix-answer" style="display:inline-block">Prefix with answer</label>
+<span style='float:right;color:#0f6cbf;padding:8px'><a role="button" id="___textareaId___-panel-help">What's this?</a></span>
+</div>
+<div id="___textareaId___-test-output">
+<pre id="___textareaId___-text"
+    style="padding:5px;background-color:#ffffeb;border-top:1px solid gray;white-space:pre-wrap;
+    overflow-wrap:break-word;max-height:600px;overflow:auto;width:100%;">
+</pre>
+<div id="___textareaId___-images"></div>
+</div>
+</div>
+</fieldset>
+<input type="hidden" class="coderunner-ui-element" name='qtype_cr-show-panel' id="___textareaId___-show-panel" value="">
+
+<script>
+// Define function crCodeWrapper(code) that takes the Python code to
+// be run and wraps it in additional Python code that runs the target
+// code in a subprocess, capturing the output, and finally printing a JSON
+// record containing int returncode, string stdout, string stderr,
+// object files. A return code of 42 indicates EOF occurred on a call to input,
+// and the prompt is written to stderr. The files field is essentially a map
+// from filename to base64 contents for any jpg, png or jpgeg images generated
+// by the run.
+//
+// If the code uses matplotlib, additional code to enable the 'Agg' front end
+// is inserted at the start. The usual modified input() function that echoes
+// stdin is also included at the start.
+window.crCodeWrapper = window.crCodeWrapper || function (code) {
+    function escape(s) {
+        return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+    var escapedCode = escape(code) + '\n';
+    var usesmatplotlib = escapedCode.indexOf('matplotlib') >= 0;
+    // Build the code to run in the subprocess.
+    // First the rewritten input function.
+    var subprocCode = `
+import sys
+MAX_OUTPUT_CHARS = 30000
+__saved_input__ = input
+def input(prompt=''):
+    try:
+        line = __saved_input__()
+    except EOFError:
+        print(prompt, end = '')
+        sys.stderr.flush()
+        sys.stdout.flush()
+        sys.exit(42)
+    print(prompt, end='')
+    print(line)
+    return line
+
+__saved_print__ = print
+__output_chars__ = 0
+def print(*params, **keyparams):
+    global __output_chars__
+    for param in params:
+        try:
+            __output_chars__ += len(str(param))
+        except:
+            pass
+    if __output_chars__ > 2 * MAX_OUTPUT_CHARS:
+        __saved_print__("\\\\n*** Excessive output. Job aborted ***", file=sys.stderr)
+        sys.exit(1)
+    else:
+        __saved_print__(*params, **keyparams)
+`;
+    if (usesmatplotlib) {  // matplotlib requires extra initialisation
+        subprocCode += `import os, tempfile, sys
+os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
+import matplotlib as _mpl
+_mpl.use("Agg")
+`;
+    }
+    // Now include the submitted code, plus the code to save any matplotlib figs.
+    subprocCode += escapedCode;
+    if (usesmatplotlib) {  // For matplotlib need to capture figs to files
+        subprocCode += `figs = _mpl.pyplot.get_fignums()
+for i, fig in enumerate(figs):
+    _mpl.pyplot.figure(fig)
+    filename = f'image{i}.png'
+    _mpl.pyplot.savefig(filename, bbox_inches='tight')
+`;
+    }
+
+    // Now we define the code to pass to the sandbox, which executes
+    // the subprocess code. First, though, it does a syntax check on
+    // the student code so syntax error messages don't confuse.
+    var sandboxProg = `
+import ast, traceback, sys, io, subprocess, base64, os, ast, traceback, json
+MAX_OUTPUT_CHARS = 30000
+
+def b64encode(filename):
+    """Return the contents of the given file in base64"""
+    with open(filename, "br") as fin:
+        contents = fin.read()
+    contents_b64 = base64.b64encode(contents).decode("utf8")
+    return contents_b64
+
+def truncated(s):
+    return s if len(s) < MAX_OUTPUT_CHARS else s[:MAX_OUTPUT_CHARS] + ' ... (truncated)'
+
+def check_syntax():
+    try:
+        ast.parse("""${escapedCode}""")
+        return ''
+    except SyntaxError:
+        catcher = io.StringIO()
+        traceback.print_exc(limit=0, file=catcher)
+        return catcher.getvalue()
+
+stdout = ''
+stderr = check_syntax()
+if stderr == '': # No syntax errors
+    program_code = """${subprocCode}""";
+    with open('prog.py', 'w') as outfile:
+        outfile.write(program_code)
+    proc = subprocess.Popen(['python3', 'prog.py'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        stdout, stderr = proc.communicate(timeout=3)
+        returncode = proc.returncode
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        stdout, stderr = proc.communicate()
+        returncode = 13
+
+
+else:
+    returncode = 1 # Syntax errors
+
+# Pick up any .png or .jpg image files.
+image_extensions = ['png', 'jpg', 'jpeg']
+image_files = [fname for fname in os.listdir() if fname.lower().split('.')[-1] in image_extensions]
+files = {fname: b64encode(fname) for fname in image_files}
+
+output = {'returncode': returncode,
+          'stdout' : truncated(stdout),
+          'stderr' : truncated(stderr),
+          'files'  : files,
+}
+print(json.dumps(output))
+`;
+    return sandboxProg;
+}
+</script>
+
+<script>
+if (window.cr_debugging || window.diagnose_ws_response === undefined) {
+    window.diagnose_ws_response = function (response) {
+        // Table of error conditions.
+        // Each row is response.error, response.result, langstring
+        // response.result is ignored if response.error is non-zero.
+        // Any condition not in the table is deemed an "Unknown runtime error".
+        var ERROR_RESPONSES = [
+            [1, 0, 'Sandbox access denied.'], // Sandbox AUTH_ERROR
+            [2, 0, 'error_unknown_language'], // Sandbox WRONG_LANG_ID
+            [3, 0, 'Sandbox access denied.'], // Sandbox ACCESS_DENIED
+            [4, 0, 'error_submission_limit_reached'], // Sandbox SUBMISSION_LIMIT_EXCEEDED
+            [5, 0, 'Sandbox overload. Please wait and try again later'], // Sandbox SERVER_OVERLOAD
+            [0, 11, ''], // RESULT_COMPILATION_ERROR
+            [0, 12, 'Scratchpad crashed. Out of memory, perhaps?'], // RESULT_RUNTIME_ERROR (supervisor process broke)
+            [0, 13, 'Scratchpad time limit error. Please report'], // RESULT TIME_LIMIT (supervisor process broke)
+            [0, 15, ''], // RESULT_SUCCESS
+            [0, 17, 'Scratchpad memory limit error. Please report'], // RESULT_MEMORY_LIMIT
+            [0, 21, 'Sandbox overload. Please wait and try again later'], // RESULT_SERVER_OVERLOAD
+            [0, 30, 'Excessive output.']  // RESULT OUTPUT_LIMIT
+        ];
+        for (var i=0; i < ERROR_RESPONSES.length; i++) {
+            var row = ERROR_RESPONSES[i];
+            if (row[0] == response.error && (response.error != 0 || response.result == row[1])) {
+                return row[2];
+            }
+        }
+        return 'error_unknown_runtime';
+    };
+}
+</script>
+<script>
+document.getElementById("___textareaId___-panel-help").onclick = function() {
+    alert("You can enter Python code into this panel and click 'Run' to execute it in the " +
+          "Python engine. Use this panel to get help on Python, e.g. 'print(dir(list))', " +
+          "to explore how small Python code fragments behave, or " +
+          "to check your answer. In the latter case, check the 'Prefix with answer' " +
+          "box so your answer code is inserted at the start.");
+};
+</script>
+
+<script>
+(function() {
+    var panelLinkButton = $(document.getElementById("___textareaId___-a-test-panel"));
+    var panelShowEl = document.getElementById('___textareaId___-show-panel');
+    var panelShow = $(panelShowEl);
+
+    panelLinkButton.on('click', function() {
+        panelShow.val(panelShow.val() == '1' ? '' : '1');
+    });
+
+    function setPanelState() {
+        function focus_editor(fieldNum) {
+            // Focus the given editor (1 or 2).
+            var editorWrapperId = `___textareaId___-ace_field${fieldNum}_wrapper`;
+            var editors = $(document.getElementById(editorWrapperId)).find('.ace_editor');
+            if (editors.length == 1) {
+                var editor = editors[0].env.editor;
+                editor.focus();
+                $(document).trigger('mousemove');
+                editors[0].style['min-height'] = "100px";
+            }
+        }
+        var panel = $(document.getElementById("___textareaId___-id_customtestpanel"));
+        if (panelShow.val() == "") {
+            panel.hide();
+            panelLinkButton.html('▶ Scratchpad');
+            focus_editor(1);
+        } else {
+            panel.show();
+            panelLinkButton.html('▼ Scratchpad');
+            focus_editor(2);
+        }
+    }
+
+    setPanelState();
+
+    // Use an observer rather than onclick or onchange so JavaScript induced changes are detected.
+    var observer = new MutationObserver(function () {
+        setPanelState();
+    });
+
+    observer.observe(panelShowEl, {attributes: true, childList: false, subtree: false});
+
+    M.util.js_pending('qtype_coderunner/userinterfacewrapper');
+    require(['qtype_coderunner/userinterfacewrapper'], function(amd) {
+        amd.newUiWrapper("ace", "___textareaId___-ace_field1");
+        M.util.js_complete('qtype_coderunner/userinterfacewrapper');
+    });
+
+    M.util.js_pending('qtype_coderunner/userinterfacewrapper');
+    require(['qtype_coderunner/userinterfacewrapper'], function(amd) {
+        amd.newUiWrapper("ace", "___textareaId___-ace_field2");
+        M.util.js_complete('qtype_coderunner/userinterfacewrapper');
+    });
+
+    $(document.getElementById('___textareaId___' + '_wrapper')).css('resize', 'none');
+})();
+</script>
+
+<script>
+if (window.escapeHtml === undefined) {
+    window.escapeHtml = function (text) {
+      var map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&apos;',
+        "\n": '<br>'
+      };
+
+      return text.replace(/[&<>"'\n]/g, function(m) { return map[m]; });
+    };
+}
+</script>
+
+<script>
+// function qtype_cr_button_clicked(ajax, outputDiv, code).
+// Called to handle a click on the 'Run' button.
+// ajax is the Moodle ajax module, outputDiv is the div into which
+// the output should be inserted, and code is the code to run, taken
+// from the question textarea (optional) plus the test code textarea.
+window.qtype_cr_button_clicked = window.qtype_cr_button_clicked ||
+        function (ajax, code, stdin, textareaId, topLevel) {
+    var outputPara = $(document.getElementById(`${textareaId}-text`));
+    var outputImages = $(document.getElementById(`${textareaId}-images`));
+    if (topLevel) {
+        // Remove any existent output content (signals that something is happening).
+        outputPara.html('');
+        outputImages.empty();
+    }
+
+    var wrappedCode = crCodeWrapper(code);
+
+    ajax.call([{
+        methodname: 'qtype_coderunner_run_in_sandbox',
+        args: {
+            contextid: M.cfg.contextid,
+            sourcecode: wrappedCode,
+            language: 'python3',
+            stdin: stdin
+        },
+        done: function(responseJson) {
+            var response = JSON.parse(responseJson);
+            var error = diagnose_ws_response(response);
+            if (error === '') { // Did the run succeed (may include timeout, syntax errors etc)?
+                var result = JSON.parse(response.output);
+                var text = result.stdout;
+
+                if (result.returncode !== 42) {
+                    text += result.stderr;
+                }
+                if (result.returncode == 13) { // Timeout
+                    text += "\n*** Timeout error ***\n"
+                }
+
+                var numImages = 0;
+                if (result.files) {
+                    outputImages.empty();
+                    for (var prop in result.files) {
+                        var image = $(`<img src="data:image/png;base64,${result.files[prop]}">`);
+                        outputImages.append(image);
+                        numImages += 1;
+                    }
+                }
+
+                if (text.trim() === '' && result.returncode !== 42) {
+                    if (numImages == 0) {
+                        outputPara.html('<span style="color:red">&lt; No output! &gt;</span>');
+                    }
+                } else {
+                    outputPara.html(escapeHtml(text));
+                }
+
+                if (result.returncode === 42) {
+                    var inputId = `${textareaId}-input-field`;
+                    outputPara.html(outputPara.html() + `<input type="text" id="${inputId}">`);
+                    var inputEl = $(document.getElementById(inputId));
+                    inputEl.focus();
+
+                    inputEl.on('keyup', function(e) {
+                        if (e.keyCode === 13) {
+                            line = inputEl.val();
+                            inputEl.remove();
+                            outputPara.html(outputPara.html() + line);
+                            qtype_cr_button_clicked(ajax, code, stdin + line + '\n', textareaId, false);
+                        }
+                    });
+                }
+            } else { // Something broke!
+                outputPara.html("*** " + error + " ***");
+            }
+        },
+        fail: function(error) {
+            alert(error.message);
+        }
+    }]);
+};
+</script>
+
+<script>
+$(document.getElementById("___textareaId___-run-button")).on('click', function() {
+    var checkbox = $(document.getElementById("___textareaId___-prefix-answer"));
+    var code = '';
+    if (checkbox.is(':checked')) {
+        code = $(document.getElementById("___textareaId___-ace_field1")).val();
+    }
+    if (code) {
+        code += '\n';
+    }
+    code += $(document.getElementById("___textareaId___-ace_field2")).val();
+    require(['core/ajax'], function(ajax) {
+        qtype_cr_button_clicked(ajax, code, '', '___textareaId___', true);
+    });
+});
+</script>
