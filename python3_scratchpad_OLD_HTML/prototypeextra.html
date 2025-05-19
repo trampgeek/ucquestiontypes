@@ -193,6 +193,7 @@ if (window.cr_debugging || window.diagnose_ws_response === undefined) {
     };
 }
 </script>
+
 <script>
 document.getElementById("___textareaId___-panel-help").onclick = function() {
     alert("You can enter Python code into this panel and click 'Run' to execute it in the " +
@@ -205,34 +206,44 @@ document.getElementById("___textareaId___-panel-help").onclick = function() {
 
 <script>
 (function() {
-    var panelLinkButton = $(document.getElementById("___textareaId___-a-test-panel"));
+    var panelLinkButton = document.getElementById("___textareaId___-a-test-panel");
     var panelShowEl = document.getElementById('___textareaId___-show-panel');
-    var panelShow = $(panelShowEl);
 
-    panelLinkButton.on('click', function() {
-        panelShow.val(panelShow.val() == '1' ? '' : '1');
+    panelLinkButton.addEventListener('click', function() {
+        panelShowEl.value = panelShowEl.value == '1' ? '' : '1';
+        // Trigger the MutationObserver
+        panelShowEl.setAttribute('data-value', panelShowEl.value);
     });
 
     function setPanelState() {
         function focus_editor(fieldNum) {
             // Focus the given editor (1 or 2).
             var editorWrapperId = `___textareaId___-ace_field${fieldNum}_wrapper`;
-            var editors = $(document.getElementById(editorWrapperId)).find('.ace_editor');
-            if (editors.length == 1) {
-                var editor = editors[0].env.editor;
-                editor.focus();
-                $(document).trigger('mousemove');
-                editors[0].style['min-height'] = "100px";
+            var editorWrapper = document.getElementById(editorWrapperId);
+            if (editorWrapper) {
+                var editors = editorWrapper.querySelectorAll('.ace_editor');
+                if (editors.length == 1) {
+                    var editor = editors[0].env.editor;
+                    editor.focus();
+                    // Create and dispatch a mousemove event to trigger any event listeners
+                    var evt = new MouseEvent('mousemove', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    });
+                    document.dispatchEvent(evt);
+                    editors[0].style['min-height'] = "100px";
+                }
             }
         }
-        var panel = $(document.getElementById("___textareaId___-id_customtestpanel"));
-        if (panelShow.val() == "") {
-            panel.hide();
-            panelLinkButton.html('▶ Scratchpad');
+        var panel = document.getElementById("___textareaId___-id_customtestpanel");
+        if (panelShowEl.value == "") {
+            panel.style.display = 'none';
+            panelLinkButton.innerHTML = '▶ Scratchpad';
             focus_editor(1);
         } else {
-            panel.show();
-            panelLinkButton.html('▼ Scratchpad');
+            panel.style.display = 'block';
+            panelLinkButton.innerHTML = '▼ Scratchpad';
             focus_editor(2);
         }
     }
@@ -240,7 +251,7 @@ document.getElementById("___textareaId___-panel-help").onclick = function() {
     setPanelState();
 
     // Use an observer rather than onclick or onchange so JavaScript induced changes are detected.
-    var observer = new MutationObserver(function () {
+    var observer = new MutationObserver(function() {
         setPanelState();
     });
 
@@ -258,7 +269,10 @@ document.getElementById("___textareaId___-panel-help").onclick = function() {
         M.util.js_complete('qtype_coderunner/userinterfacewrapper');
     });
 
-    $(document.getElementById('___textareaId___' + '_wrapper')).css('resize', 'none');
+    var wrapper = document.getElementById('___textareaId___' + '_wrapper');
+    if (wrapper) {
+        wrapper.style.resize = 'none';
+    }
 })();
 </script>
 
@@ -287,12 +301,12 @@ if (window.escapeHtml === undefined) {
 // from the question textarea (optional) plus the test code textarea.
 window.qtype_cr_button_clicked = window.qtype_cr_button_clicked ||
         function (ajax, code, stdin, textareaId, topLevel) {
-    var outputPara = $(document.getElementById(`${textareaId}-text`));
-    var outputImages = $(document.getElementById(`${textareaId}-images`));
+    var outputPara = document.getElementById(`${textareaId}-text`);
+    var outputImages = document.getElementById(`${textareaId}-images`);
     if (topLevel) {
         // Remove any existent output content (signals that something is happening).
-        outputPara.html('');
-        outputImages.empty();
+        outputPara.innerHTML = '';
+        outputImages.innerHTML = '';
     }
 
     var wrappedCode = crCodeWrapper(code);
@@ -321,39 +335,40 @@ window.qtype_cr_button_clicked = window.qtype_cr_button_clicked ||
 
                 var numImages = 0;
                 if (result.files) {
-                    outputImages.empty();
+                    outputImages.innerHTML = '';
                     for (var prop in result.files) {
-                        var image = $(`<img src="data:image/png;base64,${result.files[prop]}">`);
-                        outputImages.append(image);
+                        var image = document.createElement('img');
+                        image.src = `data:image/png;base64,${result.files[prop]}`;
+                        outputImages.appendChild(image);
                         numImages += 1;
                     }
                 }
 
                 if (text.trim() === '' && result.returncode !== 42) {
                     if (numImages == 0) {
-                        outputPara.html('<span style="color:red">&lt; No output! &gt;</span>');
+                        outputPara.innerHTML = '<span style="color:red">&lt; No output! &gt;</span>';
                     }
                 } else {
-                    outputPara.html(escapeHtml(text));
+                    outputPara.innerHTML = escapeHtml(text);
                 }
 
                 if (result.returncode === 42) {
                     var inputId = `${textareaId}-input-field`;
-                    outputPara.html(outputPara.html() + `<input type="text" id="${inputId}">`);
-                    var inputEl = $(document.getElementById(inputId));
+                    outputPara.innerHTML = outputPara.innerHTML + `<input type="text" id="${inputId}">`;
+                    var inputEl = document.getElementById(inputId);
                     inputEl.focus();
 
-                    inputEl.on('keyup', function(e) {
+                    inputEl.addEventListener('keyup', function(e) {
                         if (e.keyCode === 13) {
-                            line = inputEl.val();
+                            var line = inputEl.value;
                             inputEl.remove();
-                            outputPara.html(outputPara.html() + line);
+                            outputPara.innerHTML = outputPara.innerHTML + line;
                             qtype_cr_button_clicked(ajax, code, stdin + line + '\n', textareaId, false);
                         }
                     });
                 }
             } else { // Something broke!
-                outputPara.html("*** " + error + " ***");
+                outputPara.innerHTML = "*** " + error + " ***";
             }
         },
         fail: function(error) {
@@ -364,16 +379,16 @@ window.qtype_cr_button_clicked = window.qtype_cr_button_clicked ||
 </script>
 
 <script>
-$(document.getElementById("___textareaId___-run-button")).on('click', function() {
-    var checkbox = $(document.getElementById("___textareaId___-prefix-answer"));
+document.getElementById("___textareaId___-run-button").addEventListener('click', function() {
+    var checkbox = document.getElementById("___textareaId___-prefix-answer");
     var code = '';
-    if (checkbox.is(':checked')) {
-        code = $(document.getElementById("___textareaId___-ace_field1")).val();
+    if (checkbox.checked) {
+        code = document.getElementById("___textareaId___-ace_field1").value;
     }
     if (code) {
         code += '\n';
     }
-    code += $(document.getElementById("___textareaId___-ace_field2")).val();
+    code += document.getElementById("___textareaId___-ace_field2").value;
     require(['core/ajax'], function(ajax) {
         qtype_cr_button_clicked(ajax, code, '', '___textareaId___', true);
     });

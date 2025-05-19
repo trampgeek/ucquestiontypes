@@ -168,7 +168,15 @@ class JobRunner:
             cwd = os.getcwd()
             os.chdir('Validator')
             cpp_filenames = [filename for filename in os.listdir() if filename.endswith(".cpp")  or filename.endswith('.cc')]
-            if os.path.isfile('build'):
+            python_filenames = [filename for filename in os.listdir() if filename.endswith(".py")]
+            if cpp_filenames and python_filenames:
+                raise Exception("Validator has both cpp and python files")
+            if python_filenames:
+                if len(python_filenames) > 1:
+                    raise Exception("Validator has more than one python file")
+                # Assume python is the validator
+                self.validator = os.path.join('Validator', python_filenames[0])
+            elif os.path.isfile('build'):
                 build_result = subprocess.run(['/bin/bash', 'build'],
                                           encoding='utf-8',
                                           stdout=subprocess.PIPE,
@@ -177,7 +185,7 @@ class JobRunner:
                 with open('optionalhack.h', 'w') as outfile:
                     outfile.write('#include <optional>\n')
                 build_result = subprocess.run(['/usr/bin/g++',
-                    cpp_filenames[0], '-std=c++17', '-include',  'optionalhack.h', '-o', 'run'],
+                    cpp_filenames[0], '-std=c++17', '-O3', '-include',  'optionalhack.h', '-o', 'run'],
                     encoding='utf-8',
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT)

@@ -156,8 +156,6 @@ class PyTester(Tester):
                 '    print(f"{_mpl.pyplot.get_figlabels()}")'
             ]) + '\n'
         task = pytask.PyTask(self.params, code)
-        with open(f"WTF{randint(0,100)}.py", 'w') as outfile:
-            outfile.write(code)
         task.compile()
         captured_output, captured_error = task.run_code()
         return (captured_output + '\n' + captured_error).strip()

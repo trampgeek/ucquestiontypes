@@ -33,7 +33,6 @@ KNOWN_PARAMS = {
     'allownestedfunctions': False,
     'banfunctionredefinitions': True,
     'banglobalcode': True,
-    'checkfileclosure': False,
     'checktemplateparams': True,
     'dpi': 65,
     'echostandardinput': True,
@@ -137,7 +136,7 @@ class TestCase:
 def process_template_params():
     """Extract the template params into a global dictionary PARAMS"""
     global PARAMS
-    PARAMS = json.loads("""{{ QUESTION.parameters | json_encode | e('py') }}""")
+    PARAMS = json.loads("""{}""")
     checktemplateparams = PARAMS.get('checktemplateparams', True)
     if checktemplateparams:
         unknown_params = set(PARAMS.keys()) - set(KNOWN_PARAMS.keys())
@@ -162,14 +161,17 @@ def process_template_params():
     PARAMS['pylintoptions'] = STANDARD_PYLINT_OPTIONS + PARAMS['pylintoptions']
     if PARAMS['allowglobals']:
         PARAMS['pylintoptions'].append("--const-rgx='[a-zA-Z_][a-zA-Z0-9_]{2,30}$'")
-    if PARAMS['usesmatplotlib'] and PARAMS['pylintmatplotlib'] and 'pylint' in PARAMS['precheckers']:
-        PARAMS['pylintoptions'].append("--disable=reimported,wrong-import-position,wrong-import-order,unused-import")
+    if PARAMS['usesmatplotlib']:
+        if PARAMS['pylintmatplotlib']:
+            PARAMS['pylintoptions'].append("--disable=reimported,wrong-import-position,wrong-import-order,unused-import")
+        else:
+            PARAMS['precheckers'] = []
     if PARAMS['testisbash']:
         print("testisbash is not implemented for Python")
         
     # We use the template parameter for resultcolumns if non-empty.
     # Otherwise use the value from the question, or an equivalent default if that's empty too.
-    q_result_columns = """{{QUESTION.resultcolumns}}""".strip();
+    q_result_columns = """""".strip();
     if PARAMS['resultcolumns'] == []:
         if q_result_columns:
             PARAMS['resultcolumns'] = json.loads(q_result_columns);
@@ -179,7 +181,7 @@ def process_template_params():
 
 def get_test_cases():
     """Return an array of Test objects from the template parameter TESTCASES"""
-    test_cases = [TestCase(test) for test in json.loads("""{{ TESTCASES | json_encode | e('py') }}""")]
+    test_cases = [TestCase(test) for test in json.loads("""[{\"testtype\":\"0\",\"testcode\":\"sites_info = {42: (\\\"Christchurch\\\", \\\"Canterbury\\\"), 8472: (\\\"Timaru\\\", \\\"Canterbury\\\")}\\nprint_region_summary(sites_info, regions_from_sites(sites_info))\",\"stdin\":\"\",\"expected\":\"Canterbury\\n      42:  Christchurch                                      \\n    8472:  Timaru\",\"extra\":\"\",\"useasexample\":\"1\",\"display\":\"SHOW\",\"hiderestiffail\":\"0\",\"mark\":\"1.000\"},{\"testtype\":\"0\",\"testcode\":\"sites_info = {71: (\\\"Hokitika\\\", \\\"West Coast\\\"), 30: (\\\"Wellington\\\", \\\"Wellington\\\"), 98: (\\\"Napier\\\", \\\"Hawke's Bay\\\"), 56: (\\\"Graymouth\\\", \\\"West Coast\\\")}\\nprint_region_summary(sites_info, regions_from_sites(sites_info))\",\"stdin\":\"\",\"expected\":\"Hawke's Bay\\n      98:  Napier                                            \\nWellington\\n      30:  Wellington                                        \\nWest Coast\\n      56:  Graymouth                                         \\n      71:  Hokitika\",\"extra\":\"\",\"useasexample\":\"0\",\"display\":\"HIDE_IF_SUCCEED\",\"hiderestiffail\":\"1\",\"mark\":\"1.000\"},{\"testtype\":\"0\",\"testcode\":\"sites_info = {111: (\\\"Taumatawhakatangihangakoauauotamateapokaiwhenuakitanatahu\\\", \\\"New Zealand\\\"), 222: (\\\"Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch\\\", \\\"Wales\\\"), 333: (\\\"Chargoggagoggmanchauggagoggchaubunagungamaugg\\\", \\\"United States\\\"), 444: (\\\"Tweebuffelsmeteenskootmorsdoodgeskietfontein\\\", \\\"South Africa\\\")}\\nprint_region_summary(sites_info, regions_from_sites(sites_info))\",\"stdin\":\"\",\"expected\":\"New Zealand\\n     111:  Taumatawhakatangihangakoauauotamateap...       \\nSouth Africa\\n     444:  Tweebuffelsmeteenskootmorsdoodgeskiet...       \\nUnited States\\n     333:  Chargoggagoggmanchauggagoggchaubunagu...       \\nWales\\n     222:  Llanfairpwllgwyngyllgogerychwyrndrobw...\",\"extra\":\"\",\"useasexample\":\"0\",\"display\":\"HIDE_IF_SUCCEED\",\"hiderestiffail\":\"1\",\"mark\":\"1.000\"},{\"testtype\":\"0\",\"testcode\":\"sites_info = {90: (\\\"Bristol\\\", \\\"United Kingdom\\\"), 54: (\\\"Lyon\\\", \\\"France\\\"), 77: (\\\"Dresden\\\", \\\"Germany\\\"), 81: (\\\"Cambridge\\\", \\\"United Kingdom\\\"), 674353: (\\\"Hanover\\\", \\\"Germany\\\")}\\nprint_region_summary(sites_info, regions_from_sites(sites_info))\",\"stdin\":\"\",\"expected\":\"France\\n      54:  Lyon                                              \\nGermany\\n      77:  Dresden                                           \\n  674353:  Hanover                                           \\nUnited Kingdom\\n      81:  Cambridge                                         \\n      90:  Bristol\",\"extra\":\"\",\"useasexample\":\"0\",\"display\":\"HIDE\",\"hiderestiffail\":\"1\",\"mark\":\"1.000\"}]""")]
     return test_cases
 
 
@@ -198,7 +200,7 @@ def scrambled(answer):
     
 def get_answer():
     """Return the sample answer"""
-    answer_json = """{{QUESTION.answer | e('py')}}""".strip()
+    answer_json = """{\"answer_code\":[\"def limited_string(string, max_len):\\n    \\\"\\\"\\\" Takes a string parameter and returns that string truncated if necessary\\n        to fit in a maximum field width of max_len.\\n        If the string is more than max_len characters long\\n        returns the first (max_len - 3) characters of s with '...' appended.\\n        Otherwise the whole string is returned.\\n    \\\"\\\"\\\"\\n    if len(string) > max_len:\\n        string = string[:max_len-3] + '...'\\n    return string\\n\\n\\ndef regions_from_sites(site_info):\\n    \\\"\\\"\\\" Takes a dictionary that maps from site_ids to (site_name, site_region) tuples\\n    and returns a dictionary where the keys are region name string and the values\\n    are lists of site_ids in those regions.\\n    The site names should appear in the same order as they do in the site_info dictionary.\\n    \\\"\\\"\\\"\\n    result = dict()\\n    for site_id, info in site_info.items():\\n        name, region = info\\n        if region in result:\\n            result[region].append(site_id)\\n        else:\\n            result[region] = [site_id]\\n    return result\\n\\n\\ndef print_region_summary(site_info, region_info):\\n    \\\"\\\"\\\" Prints out the info about sites in each region.\\n    Regions should be sorted alphabetially by region name string\\n    whereas sites should be sorted by site_id\\\"\\\"\\\"\\n    for region in sorted(region_info.keys()):\\n        print(region)\\n        site_id_list = region_info[region]\\n        for site_id in sorted(site_id_list):\\n            name, region = site_info[site_id]\\n            name = limited_string(name, 40)\\n            print(f'{site_id:8}:  {name:50}')\"],\"test_code\":[\"\"],\"show_hide\":[\"\"],\"prefix_ans\":[\"1\"]}""".strip()
     try:
         answer = json.loads(answer_json)['answer_code'][0]
     except:
@@ -209,13 +211,51 @@ def process_global_params():
     """Plug into the PARAMS variable all the "global" parameters from
        the question and its answer (as distinct from the template parameters).
     """
-    PARAMS['STUDENT_ANSWER'] = """{{ STUDENT_ANSWER | e('py') }}""".rstrip() + '\n'
+    PARAMS['STUDENT_ANSWER'] = """def limited_string(string, max_len):
+    \"\"\" Takes a string parameter and returns that string truncated if necessary
+        to fit in a maximum field width of max_len.
+        If the string is more than max_len characters long
+        returns the first (max_len - 3) characters of s with '...' appended.
+        Otherwise the whole string is returned.
+    \"\"\"
+    if len(string) > max_len:
+        string = string[:max_len-3] + '...'
+    return string
+
+
+def regions_from_sites(site_info):
+    \"\"\" Takes a dictionary that maps from site_ids to (site_name, site_region) tuples
+    and returns a dictionary where the keys are region name string and the values
+    are lists of site_ids in those regions.
+    The site names should appear in the same order as they do in the site_info dictionary.
+    \"\"\"
+    result = dict()
+    for site_id, info in site_info.items():
+        name, region = info
+        if region in result:
+            result[region].append(site_id)
+        else:
+            result[region] = [site_id]
+    return result
+
+
+def print_region_summary(site_info, region_info):
+    \"\"\" Prints out the info about sites in each region.
+    Regions should be sorted alphabetially by region name string
+    whereas sites should be sorted by site_id\"\"\"
+    for region in sorted(region_info.keys()):
+        print(region)
+        site_id_list = region_info[region]
+        for site_id in sorted(site_id_list):
+            name, region = site_info[site_id]
+            name = limited_string(name, 40)
+            print(f'{site_id:8}:  {name:50}')""".rstrip() + '\n'
     PARAMS['SEPARATOR'] = "#<ab@17943918#@>#"
-    PARAMS['IS_PRECHECK'] = "{{ IS_PRECHECK }}" == "1"
-    PARAMS['QUESTION_PRECHECK'] = {{ QUESTION.precheck }} # Type of precheck: 0 = None, 1 = Empty etc
-    PARAMS['ALL_OR_NOTHING'] = "{{ QUESTION.allornothing }}" == "1" # Whether or not all-or-nothing grading is being used
-    PARAMS['GLOBAL_EXTRA'] = """{{ QUESTION.globalextra | e('py') }}\n"""
-    PARAMS['STEP_INFO'] = json.loads("""{{ QUESTION.stepinfo | json_encode }}""")
+    PARAMS['IS_PRECHECK'] = "0" == "1"
+    PARAMS['QUESTION_PRECHECK'] = 1 # Type of precheck: 0 = None, 1 = Empty etc
+    PARAMS['ALL_OR_NOTHING'] = "1" == "1" # Whether or not all-or-nothing grading is being used
+    PARAMS['GLOBAL_EXTRA'] = """\n"""
+    PARAMS['STEP_INFO'] = json.loads("""{"numchecks":0,"numprechecks":0,"fraction":0,"preferredbehaviour":"deferredfeedback","coderunnerversion":"2025021300","graderstate":""}""")
     answer = get_answer()
     if answer:
         if PARAMS['STUDENT_ANSWER'].strip() == answer.strip():
@@ -223,8 +263,7 @@ def process_global_params():
         else:
             with open("__author_solution.html") as file:
                 PARAMS['AUTHOR_ANSWER'] = (file.read().strip() % html.escape(answer))
-        with open("__author_solution_scrambled.html") as file:
-            PARAMS['AUTHOR_ANSWER_SCRAMBLED'] = (file.read().strip() % html.escape(scrambled(answer))) + "\n"
+            PARAMS['AUTHOR_ANSWER_SCRAMBLED'] = ''
     else:
         PARAMS['AUTHOR_ANSWER'] = PARAMS['AUTHOR_ANSWER_SCRAMBLED'] = ''
 

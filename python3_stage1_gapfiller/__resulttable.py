@@ -233,7 +233,7 @@ class ResultTable:
         if self.num_failed_tests == 0:
             return self.mark
         # Failed one or more tests
-        elif (self.num_failed_tests == self.num_failed_hidden_tests) and self.params['failhiddenonlyfract'] > 0:
+        elif (self.num_failed_tests == self.num_failed_hidden_tests) and self.params.get('failhiddenonlyfract', 0) > 0:
             return self.max_mark * self.params['failhiddenonlyfract']
         elif not self.params['ALL_OR_NOTHING']:
             return self.mark

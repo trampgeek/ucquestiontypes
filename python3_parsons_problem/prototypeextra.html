@@ -64,7 +64,7 @@ Problem question type.
         background-color: white;
         border: 1px solid lightgray;
         padding: 4px 8px;
-        margin-top: 4px;
+        margin: 4px 0 0 0;
         white-space: nowrap;
         overflow: hidden;
         cursor: move;
@@ -79,11 +79,17 @@ Problem question type.
     }
 
     .insertion-marker {
-        height: 35px;
+        height: 2px;
+        opacity: 0;
         background-color: inherit;
         border: 1px dashed rgb(185, 34, 34);
-        margin: 5px 0;
+        margin: 4px 0 0 0;
         pointer-events: none;
+    }
+
+    .insertion-marker.visible {
+        height: 35px;
+        opacity: 1;
     }
 
 </style>
@@ -188,7 +194,10 @@ Problem question type.
 
                 let marker = element.querySelector('.insertion-marker');
                 if (indentOnly && marker) {
-                    marker.remove(); // Suppress the marker if we're only indenting.
+                    marker.classList.remove('visible');
+                    if (marker.parentElement) {
+                        marker.parentElement.removeChild(marker);
+                    }
                 } else if (!indentOnly) {
                     const indent = this.calculateIndent(e.clientX, element)
                     this.updateInsertionMarker(element, marker, insertBefore, indent);
@@ -202,7 +211,10 @@ Problem question type.
                 if (!element.contains(e.relatedTarget)) {  // If not dragging over a child element...
                     const marker = element.querySelector('.insertion-marker');
                     if (marker) {
-                        marker.remove();
+                        marker.classList.remove('visible');
+                        if (marker.parentElement) {
+                            marker.parentElement.removeChild(marker);
+                        }
                     }
                 }
             }
@@ -214,7 +226,10 @@ Problem question type.
                 this.draggedElement = null;
                 const marker = e.currentTarget.querySelector('.insertion-marker');
                 if (marker) {
-                    marker.remove();
+                    marker.classList.remove('visible');
+                    if (marker.parentElement) {
+                        marker.parentElement.removeChild(marker);
+                    }
                 }
             }
 
@@ -227,6 +242,7 @@ Problem question type.
                     const marker = element.querySelector('.insertion-marker');
                     if (marker) {
                         element.insertBefore(this.draggedElement, marker);
+                        marker.remove();
                     } else {
                         element.appendChild(this.draggedElement);
                     }
@@ -295,7 +311,12 @@ Problem question type.
                 if (!currentElement) {
                     [this.sourceElement, this.targetElement].forEach(el => {
                         marker = el.querySelector('.insertion-marker');
-                        if (marker) marker.remove();
+                        if (marker) {
+                            marker.classList.remove('visible');
+                            if (marker.parentElement) {
+                                marker.parentElement.removeChild(marker);
+                            }
+                        }
                     });
                     return;
                 }
@@ -314,7 +335,10 @@ Problem question type.
 
                 const marker = currentElement.querySelector('.insertion-marker');
                 if (indentOnly && marker) {
-                    marker.remove();
+                    marker.classList.remove('visible');
+                    if (marker.parentElement) {
+                        marker.parentElement.removeChild(marker);
+                    }
                 } else if (!indentOnly) {
                     const indent = this.calculateIndent(touch.clientX, currentElement);
                     this.updateInsertionMarker(currentElement, marker, insertBefore, indent);
@@ -352,7 +376,10 @@ Problem question type.
                 [this.sourceElement, this.targetElement].forEach(el => {
                     const marker = el.querySelector('.insertion-marker');
                     if (marker) {
-                        marker.remove();
+                        marker.classList.remove('visible');
+                        if (marker.parentElement) {
+                            marker.parentElement.removeChild(marker);
+                        }
                     }
                 });
 
@@ -449,6 +476,12 @@ Problem question type.
                 } else {
                     targetElement.appendChild(marker);
                 }
+
+                if (!marker.classList.contains('visible')) {
+                    requestAnimationFrame(() => {
+                        marker.classList.add('visible');
+                    });
+                }
             }
         }
 
@@ -474,6 +507,8 @@ Problem question type.
                 this.makeItemsDraggable();
                 const sourceTextArea = document.getElementById(sourceTaId);
                 const parentQuestionDiv = sourceTextArea.closest('div.que');
+                // const sourceUl = document.getElementById(sourceUlId);
+                // sourceUl.style.minHeight = window.getComputedStyle(sourceUl).height; // Prevent annoying resizing.
             }
 
             loadFromTextareas() {
@@ -634,6 +669,16 @@ Problem question type.
                 targetTextArea.addEventListener('input', checkAnswer);
             }
             checkAnswer();
+        }
+
+        /* Randomize array in-place using Durstenfeld shuffle algorithm */
+        function shuffleArray(array) {
+            for (var i = array.length - 1; i >= 0; i--) {
+                var j = Math.floor(Math.random() * (i + 1));
+                var temp = array[i];
+                array[i] = array[j];
+                array[j] = temp;
+            }
         }
 
         function startUp() {

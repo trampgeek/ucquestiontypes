@@ -42,15 +42,6 @@ class CodeTrap(object):
         if 'echostandardinput' not in params:
             self.params['echostandardinput'] = True
         self.run_code = student_code
-
-        if params["checkfileclosure"]:
-            self.run_code += '''
-names = list(_open_files.keys())
-if len(names) == 1:
-    print(f"You forgot to close the file '{names[0]}'.")
-elif len(names) > 1:
-    print(f"""You forgot to close the files: '{"', '".join(names)}'.""")
-'''
         self.scoped_globals = self._get_globals()
 
         if seconds_remaining is None:
