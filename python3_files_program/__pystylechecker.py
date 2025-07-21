@@ -39,7 +39,7 @@ class StyleChecker:
         pylint_opts = self.params.get('pylintoptions',[])
         ruff_opts = self.params.get('ruffoptions', [])
 
-        precheckers = self.params.get('precheckers', ['ruff'])
+        precheckers = self.params.get('precheckers', ['pylint'])
         result = ''
 
         # First try checking with pylint and/or ruff.

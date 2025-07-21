@@ -67,13 +67,6 @@ class ResultTable:
             header.append(required_columns['testcode'])
             self.has_tests = True
 
-            # *** WHAT WAS THIS ABOUT??? ***
-            # If the test code should be rendered in html then set that as column format.
-            #if any(getattr(test, 'test_code_html', None) for test in testcases):
-            #    self.column_formats.append('%h')
-            #else:
-            #    self.column_formats.append('%s')
-
         # If this is a write-a-function file question, the stdin field is hidden regardless.
         # TODO: are there exceptions to this?
         hide_stdin = self.is_file_question and self.params['isfunction']

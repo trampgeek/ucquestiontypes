@@ -8,6 +8,7 @@ import types
 from math import floor
 import os
 import re
+import copy
 from __watchdog import Watchdog
 
 SOURCE_FILENAME = 'student_answer.py'
@@ -45,11 +46,12 @@ class CodeTrap(object):
 
         if params["checkfileclosure"]:
             self.run_code += '''
-names = list(_open_files.keys())
-if len(names) == 1:
-    print(f"You forgot to close the file '{names[0]}'.")
-elif len(names) > 1:
-    print(f"""You forgot to close the files: '{"', '".join(names)}'.""")
+files = _open_files.values() if '_open_files' in vars() else []
+open_file_names = [name for name, close_func in files]
+if len(open_file_names) == 1:
+    print(f"You forgot to close the file '{open_file_names[0]}'.")
+elif len(open_file_names) > 1:
+    print(f"""You forgot to close the files: '{"', '".join(open_file_names)}'.""")
 '''
         self.scoped_globals = self._get_globals()
 
@@ -59,6 +61,7 @@ elif len(names) > 1:
             self.seconds_remaining = min(seconds_remaining, self.params['timeout'])
         CodeTrap.MAX_OUTPUT_CHARS = 30000
         CodeTrap.output_chars = 0  # Count of printed chars (more or less)
+        CodeTrap.running = False
 
     def _get_globals(self):
         """ Here we define any globals that must be available """
@@ -111,17 +114,29 @@ elif len(names) > 1:
 
         # (mct63) Insure print always prints to the redirected stdout and not actual stdout.
         # (rjl83) Also keep track of print quantity and raise ExcessiveOutput if too much is generated.
+        # (rjl83) I can't see why mct63 (above) prevents printing to files, so I have allowed the value
+        # of a file parameter (if given) to be passed on to the actual print. 
+
+        # Need to clone the object being printed first, as some dreadful students mutate objects in the implementation of str!
+        # We also need to prevent any output if the print function is called recursively, e.g. via a print student inside
+        # a custom __str__ method (since our overridden print calls str on the object to gets its length).
         def new_print(*values, sep=' ', end='\n', file=None, flush=False):
+            if self.running:  # Prevent any output if called recursively.
+                return None
             for value in values:
                 try:
-                    CodeTrap.output_chars += len(str(value))
+                    clone = copy.deepcopy(value)
+                    self.running = True
+                    length = len(str(clone))  # This is where recursion could occur if student prints in __str__.
+                    self.running = False
+                    CodeTrap.output_chars += length
                 except:
                     pass
             if CodeTrap.output_chars > self.params['maxoutputbytes']:
                 raise ExcessiveOutput()
-            return print(*values, sep=sep, end=end, file=sys.stdout)
+            return print(*values, sep=sep, end=end, file=file)
             
-        # force 'input' to echo to stdin to stdout
+        # force 'input' to echo stdin to stdout
         if self.params['echostandardinput']:
             def new_input(prompt=''):
                 """ Replace the standard input prompt with a cleverer one. """

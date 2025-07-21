@@ -39,7 +39,7 @@ class StyleChecker:
         pylint_opts = self.params.get('pylintoptions',[])
         ruff_opts = self.params.get('ruffoptions', [])
 
-        precheckers = self.params.get('precheckers', ['ruff'])
+        precheckers = self.params.get('precheckers', ['pylint'])
         result = ''
 
         # First try checking with pylint and/or ruff.
@@ -75,6 +75,7 @@ class StyleChecker:
 
                 if "Using config file" in result:
                     result = '\n'.join(result.splitlines()[1:]).split()
+
 
         if result == '' and 'mypy' in precheckers:
             code_to_check = 'from typing import List as list, Dict as dict, Tuple as tuple, Set as set, Any\n' + code_to_check

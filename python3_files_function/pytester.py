@@ -32,8 +32,11 @@ class PyTester(Tester):
                     if filename == '':
                         raise Exception('The first line of stdin must be the filename')
                     if filename not in params['protectedfiles']:
+                        contents = test.extra.rstrip()
+                        if params.get('addnewline', True):
+                            contents += '\n'
                         with open(filename, 'w') as outfile:
-                            outfile.write(test.extra.rstrip() + '\n')
+                            outfile.write(contents)
 
         # Py-dependent attributes
         self.task = pytask.PyTask(params)
@@ -228,6 +231,7 @@ class PyTester(Tester):
         error_patterns = [
                 (r'(.*<fstring>.* \(syntax-error\).*)', []),
                 (r'(.*File ".*", line +)(\d+)(, in .*)', [2]),
+                (r'(source.py:)(\d+)(: .+)', [2]),
                 (r'(.*: *)(\d+)(, *\d+:.*\(.*line +)(\d+)(\).*)', [2, 4]),
                 (r'(.*: *)(\d+)(, *\d+:.*\(.*\).*)', [2]),
                 (r'(.*:)(\d+)(:\d+: [A-Z]\d+: .*line )(\d+)(.*)', [2, 4]),
