@@ -154,19 +154,26 @@ class ResultTable:
         self.global_error = error_message
   
     def format_extra_for_files(self, extra, filename):
-        """Format the extra field (which should be the contents of a file). If 
-           the longest line exceeds filedownloadwidth or the number of lines
-           exceeds filedownloadlines the file is converted into a data URI.
-           Otherwise it's returned as is.
+        """Format the extra field (which should be the contents of a file). 
+           Firstly the file contents are displayed unless the longest line exceeds
+           filemaxwidth (or, legacy, filedownloadwidth) or the number of lines
+           exceeds filemaxlines (or, legacy, filedownloadlines).
+           In addition, a download data URI link is added at the end.
         """
         lines = extra.splitlines()
-        too_wide = len(lines) > 0 and (max(len(line) for line in lines) > self.params['filedownloadwidth'])
-        too_high = len(lines) > self.params['filedownloadlines']
-        if too_wide or too_high:
+        max_width = max(self.params.get('filedownloadwidth', 0), self.params.get('filemaxwidth', 0))
+        max_lines = max(self.params.get('filedownloadlines', 0), self.params.get('filemaxlines', 0))
+        too_wide = len(lines) > 0 and (max(len(line) for line in lines) > max_width)
+        too_high = len(lines) > max_lines
+        contents = ''
+        if extra:
+            if not too_wide and not too_high:
+                contents += '<pre style="padding-bottom:15px">' + extra + '</pre>'
             quoted = quote(extra)
-            link = f'<a href="data:text/plain;charset=utf-8,{quoted}" download={filename}><span style="color:blue;font-weight:bold;text-decoration: underline;">Download</span></a>'
-            return link
-        return '<pre>' + extra + '</pre>'
+            link_style = "display: inline-block; padding: 4px 8px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 3px; font-size: 12px; border: none; cursor: pointer;"
+            link = f'<a href="data:text/plain;charset=utf-8,{quoted}" download="{filename}" style="{link_style}">Download</a>'
+            contents += link
+        return contents
 
     def add_row(self, testcase, result, error=''):
         """Add a result row to the table for the given test and result"""
@@ -201,7 +208,7 @@ class ResultTable:
             else:
                 result = error_message
 
-        if self.has_got or error:
+        if self.has_got:
             row.append(result)
 
         display = testcase.display.upper()
@@ -233,7 +240,7 @@ class ResultTable:
         if self.num_failed_tests == 0:
             return self.mark
         # Failed one or more tests
-        elif (self.num_failed_tests == self.num_failed_hidden_tests) and self.params['failhiddenonlyfract'] > 0:
+        elif (self.num_failed_tests == self.num_failed_hidden_tests) and self.params.get('failhiddenonlyfract', 0) > 0:
             return self.max_mark * self.params['failhiddenonlyfract']
         elif not self.params['ALL_OR_NOTHING']:
             return self.mark

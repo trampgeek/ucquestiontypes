@@ -45,7 +45,7 @@ class PyTester(Tester):
 
         if params['usesmatplotlib']:
             self.prelude += '\n'.join([
-                'import os',
+                #'import os',    *** Why was there prior to 25/9/25?!!
                 'import matplotlib as _mpl',
                 '_mpl.use("Agg")',
                 'from __plottools import print_plot_info',

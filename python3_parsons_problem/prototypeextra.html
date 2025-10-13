@@ -22,7 +22,7 @@ Problem question type.
         margin-left: 2%;
         float: left;
         width: 94%;
-        max-width: {{ code_width }};
+        max-width: 500px; /* But overridden by value in preload */
     }
 
     .sortable-code ul {
@@ -698,6 +698,14 @@ Problem question type.
             } else {    
                 setupAuthoring(sourceTextArea, targetTextArea);
             }
+
+            const maxWidth = document.getElementById("CR-parsons-maxwidth-___textareaId___").value + "px";
+            const codeBlocks = document.getElementsByClassName("sortable-code");
+            for (const blk of codeBlocks) {
+                blk.style.maxWidth = maxWidth;
+            }
+            console.log("Set " + codeBlocks.length + " elements to width " + maxWidth)
+            
         }
 
         startUp();
@@ -714,12 +722,17 @@ Problem question type.
 </div>
 
 <div id="CR-parsons-preload-authoring-div-___textareaId___" class="CR-parsons-authoring">
+
     <h4>Drag-able code lines:</h4>
     <textarea id="CR-parsons-source-ta-___textareaId___" name='CR-parsons-source'
               class="coderunner-ui-element CR-parsons-answer-edit" rows="8"></textarea>
     <div id="CR-parsons-button-div-___textareaId___">
         <button id="CR-parsons-shuffle-___textareaId___" type="button">Shuffle</button>
         <button id="CR-unindent-___textareaId___" type="button">Remove indentation</button>
+    </div>
+    <div style="padding-top:6px">Max code width (px): 
+        <input type="text" class="coderunner-ui-element" name='CR-parsons-maxwidth'
+        id="CR-parsons-maxwidth-___textareaId___" value="500" size="4">
     </div>
 </div>
 
