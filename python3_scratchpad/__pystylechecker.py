@@ -6,10 +6,47 @@ import sys
 import subprocess
 import ast
 import tokenize
-import token
 import re
-import shutil
+import time
+import json
 from collections import defaultdict
+from __docstringclassifierclass import DocstringClassifier
+
+#MODEL = "gemma3:27b"
+#MODEL = "8b"
+#MODEL = "geminiflash"
+MODEL = "gemma3:27b-cosc"
+
+def extract_all_functions(response):
+    """Given a program, return a list of the python function definitions.
+       Raise ast.SyntaxError if parse fails.
+       response is a general response, so may be JSON.
+    """
+    try:
+        decoded = json.loads(response)
+        if isinstance(decoded, dict):
+            code = decoded['answer_code'][0]
+        else:
+            code = response
+    except json.JSONDecodeError:
+        code = response
+
+    try:
+        tree = ast.parse(code)
+    except:
+        return []
+
+    functions = []
+    
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
+            # Get the exact source segment for this node
+            function_string = ast.get_source_segment(code, node)
+            if function_string:
+                functions.append(function_string)
+    
+    return functions
+
 
 class StyleChecker:
     def __init__(self, prelude, student_answer, params):
@@ -18,12 +55,77 @@ class StyleChecker:
         self.params = params
         self.function_call_map = None
         self._tree = None
+        self.model = params.get('llmmodel', MODEL)
+        if self.model is None:
+            self.model = MODEL
+        self.fail_all_llm_checks = params.get('failallllmchecks', False)
 
     @property
     def tree(self):
         if self._tree is None:
             self._tree = ast.parse(self.student_answer)
         return self._tree
+    
+    
+    def check_function_docstrings(self):
+        """Extract all the function docstrings and check
+           them. Only the last non-main function is checked
+           properly - the others are checked only for non-triviality
+           (meaning 'existing and containing at least 3 words').
+           Return a list of error messages, empty if none.
+        """
+
+        classifier = DocstringClassifier(self.model)
+        functions = extract_all_functions(self.student_answer)
+        done_one = False
+        bad_docstrings = []
+        for fun in reversed(functions):
+            match = re.match(r'def +([^\(]+).*', fun)
+            if match:
+                fname = match[1]
+            else:
+                fname = 'Unknown'
+
+            # Use the LLM only on the first function whose name isn't 'main'
+            if fname == 'main':
+                continue  # We don't require docstrings for main.
+
+            t0 = time.perf_counter()
+            validity = classifier.classify_function_docstring(fun, use_llm=not done_one)
+            t1 = time.perf_counter()
+            done_one = True
+            if self.fail_all_llm_checks or validity.startswith('INVALID'):
+                bad_docstrings.append(f"Docstring for function {fname}: {validity} ({(t1 - t0):.1f} secs)")
+        return bad_docstrings
+    
+
+    def check_module_docstring(self):
+        """Check the module docstring in self.student_answer.
+           Should be called only if this is not a write-a-function question.
+           Return value is either the empty list if the module docstring
+           is OK or a singleton list containing a string of the form
+           "INVALD - {explanation_of_why} ({time} secs)".
+           As a special case, if self.fail_all_llm_checks is true,
+           a valid docstring response will also be returned, in the
+           form "VALID ({time} secs)"
+           Note: the reason for returning a list if for compatibility with check_function_docstrings.
+        """
+        result = []
+        t0 = time.perf_counter()
+        classifier = DocstringClassifier(self.model)
+        module_docstring = ast.get_docstring(self.tree)
+        if not module_docstring:
+            return ["Module docstring: INVALID - no module docstring"]
+        elif len(module_docstring.split()) < 3:
+            return ["Module docstring:: INVALID - docstring requires at least 3 words"]
+        else:
+            result = classifier.classify_module_docstring(self.student_answer)
+            t1 = time.perf_counter()
+            if self.fail_all_llm_checks or not result.startswith('VALID'):
+                return [f"Module docstring: {result} ({(t1 - t0):.1f} secs)"]
+            else:
+                return []
+
 
     def style_errors(self):
         """Return a list of errors from local style checks plus pylint and/or mypy
@@ -97,9 +199,16 @@ class StyleChecker:
             bad_funcs = self.check_type_hints()
             for fun in bad_funcs:
                 result += f"Function '{fun}' does not have correct type hints\n"
-
+                
+        # If all is good so far, and docstring checking is enabled, try asking the LLM to classify all function docstrings.
+        # Module docstrings are not being checked.
         if result:
             errors = result.strip().splitlines()
+        
+        if not errors and self.params.get('requiredocstrings', False):
+            errors += self.check_function_docstrings()
+            if not self.params.get('isfunction', True):
+                errors  += self.check_module_docstring()
 
         return errors
     
@@ -605,3 +714,14 @@ class StyleChecker:
         """
         returns = self.nested_returns()
         return sum(returns[depth] for depth in range(max_depth + 1, 10))
+
+
+if __name__ == '__main__':
+    student_answer = '''"""Asst 3, Q5"""
+BLAH = 'thing'
+def calculate_average(numbers):
+    """Boil an egg"""
+    return sum(numbers) / len(numbers)
+'''
+    checker = StyleChecker('', student_answer, {"isfunction": False, "requiredocstrings": True})
+    print(checker.style_errors())

@@ -13,10 +13,10 @@ from random import randint
 
 class PyTester(Tester):
     def __init__(self, params, testcases):
-        """Initialise the instance, given the test of template and global parameters plus
+        """Initialise the instance, given the list of template and global parameters plus
            all the testcases. Parameters relevant to this class are all those listed for the Tester class plus
-               'extra' which takes the values 'pretest' or 'posttest' (the other possible value, 'stdin', has been
-               handled by the main template).
+           'extra' which takes the values 'pretest' or 'posttest' (the other possible value, 'stdin', has been
+            handled by the main template).
            Additionally the support classes like stylechecker and pyparser need their
            own params - q.v.
         """

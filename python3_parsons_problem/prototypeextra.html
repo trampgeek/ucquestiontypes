@@ -579,6 +579,7 @@ Problem question type.
         // message (yellow highlighted) if not.
         // Also rebuilds the source field for the answer to contain all unused
         // lines in the target.
+        // And copies the maxWidth from answer preload to answer.
         // Works only in the question authoring context.
         function checkAnswer() {
             const sourceTa = document.getElementById('CR-parsons-source-ta-id_answerpreload');
@@ -586,6 +587,8 @@ Problem question type.
             const errorPara = document.getElementById('CR-parsons-answer-error-id_answer');
             const sourceLines = sourceTa.value.trim().split("\n");
             const answerLines = targetTa.value.trim().split("\n");
+            const answerMaxWidth = document.getElementById('CR-parsons-maxwidth-id_answer');
+            const answerPreloadMaxWidth = document.getElementById('CR-parsons-maxwidth-id_answerpreload');
 
             errorPara.style.display = 'none';
             let used = [];
@@ -607,6 +610,9 @@ Problem question type.
             answerUnused.value = sourceLines
                 .filter((_, index) => !used.includes(index))
                 .join('\n');
+
+            answerMaxWidth.value = answerPreloadMaxWidth.value;
+            
         }
 
 
@@ -664,6 +670,8 @@ Problem question type.
                 };
 
                 sourceTextArea.addEventListener('input', checkAnswer);
+                const maxWidthEl = document.getElementById("CR-parsons-maxwidth-id_answerpreload");
+                maxWidthEl.addEventListener('input', checkAnswer);
             } else {
                 document.getElementById("CR-parsons-answer-authoring-div-___textareaId___").style.display = "block";
                 targetTextArea.addEventListener('input', checkAnswer);
@@ -695,16 +703,15 @@ Problem question type.
 
             if (isQuestion) {
                 doAceHighlighting(parentQuestionDiv);
+                const maxWidth = document.getElementById("CR-parsons-maxwidth-___textareaId___").value + "px";
+                const codeBlocks = document.getElementsByClassName("sortable-code");
+                for (const blk of codeBlocks) {
+                    blk.style.maxWidth = maxWidth;
+                }
             } else {    
                 setupAuthoring(sourceTextArea, targetTextArea);
             }
 
-            const maxWidth = document.getElementById("CR-parsons-maxwidth-___textareaId___").value + "px";
-            const codeBlocks = document.getElementsByClassName("sortable-code");
-            for (const blk of codeBlocks) {
-                blk.style.maxWidth = maxWidth;
-            }
-            console.log("Set " + codeBlocks.length + " elements to width " + maxWidth)
             
         }
 
