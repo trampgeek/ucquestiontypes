@@ -1,0 +1,24 @@
+<h3>RoboTurtle Functions</h3>
+    <h5>Commands (all global functions) are:</h5>
+    <ul>
+    <li><code>move()</code> - move one cell forward</li>
+    <li><code>turn_left()</code> - rotate 90 degrees counterclockwise</li>
+    <li><code>turn_right()</code> - rotate 90 degrees clockwise</li>
+    <li><code>take()</code> - pick up an item from the current cell and place it in the inventory</li>
+    <li><code>put()</code> - place the least-recently-picked up object in the current cell</li>
+    <li><code>toss()</code> - place the least-recently-picked up object in the cell directly in front of the current cell.</li>
+    <!--li><code>build_wall()</code> - build a wall directly in front of the robot, i.e. at the edge of the current cell in the direction the robot is facing.<li-->
+    <li><code>print_state()</code> - print robot position and heading.</li>
+    <li><code>speed(n)</code> - set speed to n where n in range 1 - 10 (slow to fast). n = 0 for max possible speed.</li>
+    </li>
+    </ul>
+    <h5>State-checking boolean functions</h5>
+    <ul>
+    <li><code>at_goal()</code> - true if the robot is at the specified goal position</li>
+    <li><code>front_is_clear()</code> - true if the robot is able to move forward</li>
+    <li><code>right_is_clear()</code> - true if the cell to the right is clear</li>
+    <li><code>wall_in_front()</code> - true if there's a wall in front</li>
+    <li><code>wall_on_right()</code> - true if there's a wall to the right</li>
+    <li><code>object_here()</code> - true if there's an object in the current cell</li>
+    <li><code>carries_object()</code> - true if the inventory is non-empty</li>
+    <li><code>is_facing_north()</code> - true if the robot is facing north</li></ul>

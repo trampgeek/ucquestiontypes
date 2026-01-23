@@ -1,0 +1,102 @@
+<!-- The "prototypeextra" field for the CodeRunner Reeborg question type.
+     Implements a rudimentary version of the Reeborg robot programming tool
+     from https://reeborg.ca/reeborg.html.
+     This implementation uses Python Turtle graphics as implemented by the
+     Skulpt python-in-the-browser tool.
+  -->
+
+<!-- First, the Python code that runs in the browser. It runs twice:
+     once when the question is first loaded and then again, with the student
+     answer appended, when the user clicks "Run".
+-->
+<div style="display:none">
+<h3>Prefix code (Python)</h3>
+<textarea id="___textareaId___prefix" style="display:none">
+from turtle import Turtle, Screen
+{INCLUDE:assembledrobot.py}
+</textarea>
+</div>
+
+<!-- ================================================================
+     The following script is used as a wrapper for the list of test cases
+     for a particular Reeborg question. Its value is filled in by Twig
+     from the "testcases" template parameter - a JSON structure that is
+     a list of JSON objects, each defining a world.
+ -->
+<div style="display:none">
+<h3>Tests</h3>
+<input type="hidden" id="___textareaId___currenttest" value="0">
+<textarea id="___textareaId___tests" style="display:none">
+{{ testcases | json_encode }}
+</textarea>
+<input type="hidden" id="___textareaId___maxnumlines" value="{{ maxnumlines | default('0') }}">
+</div>
+
+<!-- ================== The UI the student sees ====================-->
+<script>
+    var rows = document.getElementById('___textareaId___').rows;
+    document.getElementById("___textareaId___answercode").rows = rows;
+</script>
+
+<script>
+function toggleRoboTurtleHelp(textareaId) {
+  const helpDiv = document.getElementById(`${textareaId}robotturtle-help`);
+  const button = document.getElementById(`${textareaId}toggle-help-btn`);
+  
+  if (helpDiv.style.display === 'none') {
+    helpDiv.style.display = 'inline-block';
+    button.textContent = 'Hide RoboTurtle Help';
+  } else {
+    helpDiv.style.display = 'none';
+    button.textContent = 'RoboTurtle Help';
+  }
+}
+</script>
+
+<div id="___textareaId___mycanvas" style="background-color:white;border:2px darkgray;width:auto;min-height:5cm;display:inline-block;vertical-align:top">
+</div>
+
+<div id="___textareaId___robotturtle-help" style="display:none; padding-top:20px;padding-left:15px">
+{INCLUDE:help.html}
+</div> 
+
+<div>
+<h4 style="padding-top:12px">Your answer</h4>
+<textarea class="coderunner-ui-element" id="___textareaId___answercode"
+    name="answer_code" spellcheck="false" data-lang="python3">
+</textarea>
+<button type="button" id="___textareaId____answer_prev-btn" style="margin:6px; margin-right:10px; padding:2px 8px;border-radius:10px;">Previous test</button>
+<button type="button" id="___textareaId____answer_run-btn" style="margin:6px; margin-right:10px; padding:2px 8px;border-radius:10px;">Run</button>
+<button type="button" id="___textareaId____answer_next-btn" style="margin:6px; margin-right:10px; padding:2px 8px;border-radius:10px;">Next test</button>
+{% if showhelpbutton is not defined or showhelpbutton %}
+<button type="button" id="___textareaId___toggle-help-btn" style="margin:6px; margin-right:10px; margin-top:13px;padding:2px 8px;border-radius:10px;float:right">RoboTurtle Help</button>
+{% endif %}
+</div>
+<div>
+<pre id="___textareaId___output" ></pre>
+</div>
+
+<!-- Modal dialog for feedback -->
+<div id="___textareaId___modal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.5);">
+    <div style="background-color:#fefefe; margin:10% auto; padding:0; border-radius:12px; width:80%; max-width:500px; box-shadow:0 8px 16px rgba(0,0,0,0.3);">
+        <div id="___textareaId___modal-header" style="padding:20px; border-radius:12px 12px 0 0; color:white; font-weight:bold; font-size:20px; text-align:center;"></div>
+        <div id="___textareaId___modal-body" style="padding:25px; font-size:16px; line-height:1.5; color:#333;"></div>
+        <div style="padding:20px; text-align:center; border-top:1px solid #eee;">
+            <button type="button" id="___textareaId___modal-btn-primary" style="padding:12px 30px; margin:0 5px; border-radius:8px; border:none; cursor:pointer; font-size:16px; font-weight:bold;"></button>
+            <button type="button" id="___textareaId___modal-btn-secondary" style="display:none; padding:12px 30px; margin:0 5px; border-radius:8px; border:none; cursor:pointer; font-size:16px; background-color:#6c757d; color:white;"></button>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================================
+    Now the code to run the Roboturtle to initialise the display of the question and
+    then again when 'Run' is clicked. 
+     We can't just load the two scripts directly as scripts don't load
+     and execute sequentially in dynamically created HTML. Also we
+     want only the first Reeborg or Turtle question on a page to do the loading
+-->
+ 
+<script>
+{INCLUDE:roboturtle.js}
+</script> 
+

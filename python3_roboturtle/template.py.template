@@ -1,0 +1,142 @@
+"""
+RoboTurtle - A Reeborg-like programming teaching tool built on Python turtle graphics.
+"""
+
+import sys
+import json
+import traceback
+
+from typing import List, Dict, Any, Tuple
+
+{INCLUDE:turtle.py}
+
+{INCLUDE:assembledrobot.py}
+
+
+# ============================================================================
+# Checker Function
+# ============================================================================
+
+
+def run_tests(testcases: List[Dict[str, Any]], student_code: str, disabled_functions: List) -> str:
+    """
+    Run student code against all test cases.
+    
+    Args:
+        testcases: List of test case specifications
+        student_code: The student's Python code as a string
+        disabled_functions: functions to be removed from the namespace for this question
+    
+    Returns:
+        An error message string - empty if no errors.
+    """
+    for i, testcase in enumerate(testcases):
+        try:
+            # Load the world for this test case
+            load_world(testcase)
+            
+            # Create a namespace with the global functions
+            namespace = {
+                'move': move,
+                'turn_left': turn_left,
+                'turn_right': turn_right,
+                'take': take,
+                'put': put,
+                'toss': toss,
+                'build_wall': build_wall,
+                'at_goal': at_goal,
+                'front_is_clear': front_is_clear,
+                'right_is_clear': right_is_clear,
+                'wall_in_front': wall_in_front,
+                'wall_on_right': wall_on_right,
+                'object_here': object_here,
+                'carries_object': carries_object,
+                'is_facing_north': is_facing_north,
+                'speed': speed,
+                'print': lambda *args, **kwargs: None,
+                'print_state': lambda : None,
+            }
+
+            for func in disabled_functions:
+                del namespace[func];
+            
+            # Execute the student's code
+            try:
+                exec(student_code, namespace)
+            except SyntaxError as e:
+                return f"Syntax error in your code at line {e.lineno}: {e.msg}"
+            except RuntimeError as e:
+                # Extract line number from traceback
+                tb = traceback.extract_tb(sys.exc_info()[2])
+                # Find the last frame that's in the student's code (not in this module)
+                student_frame = None
+                for frame in tb:
+                    if frame.filename == "<string>":
+                        student_frame = frame
+                
+                error_msg = str(e)
+                if student_frame:
+                    return f"Error at line {student_frame.lineno}: {error_msg}"
+                else:
+                    return f"Error: {error_msg}"
+            except Exception as e:
+                # Extract line number from traceback
+                tb = traceback.extract_tb(sys.exc_info()[2])
+                student_frame = None
+                for frame in tb:
+                    if frame.filename == "<string>":
+                        student_frame = frame
+                
+                error_type = type(e).__name__
+                error_msg = str(e)
+                if student_frame:
+                    return f"{error_type} at line {student_frame.lineno}: {error_msg}"
+                else:
+                    return f"{error_type}: {error_msg}"
+            
+            # Check if goal is satisfied (fail message will be empty)
+            errors = _current_world.fail_message().strip()
+            if errors:
+                return f"Test {i+1} failed as follows:\n{errors}"
+        
+        except Exception as e:
+            return f"Test setup error: {str(e)}"
+    
+    # All tests passed
+    return ''
+
+def count_python_lines(code):
+    """Support function to return (roughly) the count of lines of code"""
+    lines = code.split('\n')
+    count = 0
+    
+    for line in lines:
+        trimmed = line.strip()
+        if trimmed == '' or trimmed.startswith('#'):
+            continue
+        
+        # Skip lines containing triple quotes (docstrings)
+        if '"""' in trimmed or "'''" in trimmed:
+            continue
+
+        count += 1
+    
+    return count
+
+
+__student_code = """{{ STUDENT_ANSWER | e('py') }}"""
+__testcases = json.loads("""{{testcases | json_encode}}""")
+__maxlines = int("""{{maxnumlines |default('0') | e('py')}}""")
+__disabled_functions__ = json.loads("""{{disabledfunctions | default([]) | json_encode}}""")
+line_count = count_python_lines(__student_code)
+if __maxlines > 0 and line_count > __maxlines:
+    result = {'fraction': 0, 'prologuehtml': f"Sorry - at most {__maxlines} lines of code are allowed. You have {line_count}"}
+else:
+    output = run_tests(__testcases, __student_code, __disabled_functions__)
+    if output.strip() == '':
+        result = {'fraction': 1, 'prologuehtml': f"<h3>All tests passed - well done! 😊</h3>"}
+    else:
+        errors = output.replace('\n', '<br>')
+        result = {'fraction': 0, 'prologuehtml': f"<h3>Oops, looks like that didn't work.</h3><p>{errors}</p>"}
+
+print(json.dumps(result))

@@ -1,0 +1,24 @@
+"""
+The assembled RoboTurtle and all its support classes, ready
+for inclusion in both the CodeRunner question template and the
+prototypeextra.html file that needs to execute the same code
+using Skulpt.
+"""
+
+{INCLUDE:classes/item.py}
+
+{INCLUDE:classes/roboturtle.py}
+
+{INCLUDE:classes/world.py}
+
+{INCLUDE:classes/targetworld.py}
+
+{INCLUDE:classes/pickupitemsworld.py}
+    
+{INCLUDE:classes/pathworld.py}
+
+{INCLUDE:classes/botcontroller.py}
+
+{INCLUDE:classes/worldloader.py}
+
+{INCLUDE:classes/globalcommands.py}
