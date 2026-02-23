@@ -1455,6 +1455,75 @@ window._skulptLoader.load().then(() => {
         }
     }
 
+    // Return the given code with docstring contents replaced with spaces (except
+    //  newlines, preserved to ensure line numbers are valid).
+    function stripDocstrings(code) {
+        return code.replace(/""".*?"""|'''.*?'''/gs, match => match.replace(/[^\n]/g, ' '));
+    }
+
+    // Check the student answer for a couple of potentially confusing flaws
+    // before running it: missing parentheses in function call or defined
+    // support function never called.
+    function checkAnswer(answer) {
+        const turtleMethods = ['move', 'turn_left', 'turn_right', 'take', 'put', 'toss', 'print_state',
+            'speed', 'at_goal', 'front_is_clear', 'right_is_clear', 'wall_in_front', 'wall_on_right',
+            'object_here', 'carries_object', 'is_facing_north'];
+        
+        // Preprocess all lines: split and remove comments once.
+        const cleaned = stripDocstrings(answer);
+        const lines = cleaned.split('\n').map(line => line.split('#')[0].trim());
+        
+        // First pass: find all user-defined functions
+        const userDefinedFunctions = [];
+        for (let i = 0; i < lines.length; i++) {
+            const defMatch = lines[i].match(/^def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
+            if (defMatch) {
+                userDefinedFunctions.push({
+                    name: defMatch[1],
+                    lineNumber: i + 1
+                });
+            }
+        }
+        
+        // Combine turtle methods with user-defined function names for parentheses check
+        const allFunctions = [...turtleMethods, ...userDefinedFunctions.map(f => f.name)];
+        
+        // Second pass: check for missing parentheses
+        for (let i = 0; i < lines.length; i++) {   
+            if (lines[i].match(/def\s+/)) continue; // Skip def lines
+
+            for (const method of allFunctions) {
+                const regex = new RegExp(`\\b${method}\\b(?!\\s*\\()`);
+                
+                if (regex.test(lines[i])) {
+                    return `Line ${i + 1}: missing parentheses in call to function '${method}'`;
+                }
+            }
+        }
+        
+        // Third pass: check if user-defined functions are actually called
+        for (const func of userDefinedFunctions) {
+            let functionCalled = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+                 if (lines[i].match(/def\s+/)) continue; // Skip def lines
+
+                // Check if function is called (with parentheses)
+                const callRegex = new RegExp(`\\b${func.name}\\s*\\(`);
+                if (callRegex.test(lines[i])) {
+                    functionCalled = true;
+                    break;
+                }
+            }
+            
+            if (!functionCalled) {
+                return `Line ${func.lineNumber}: function '${func.name}' is defined but never called`;
+            }
+        }
+        
+        return '';
+    }
+
     // The main 'runSkulpt' function, called from runSkulptWhenFree
     // when window._skActive is false. Runs as a callback so is essentially async.
     function runSkulpt(includeAnswer) {
@@ -1491,6 +1560,12 @@ window._skulptLoader.load().then(() => {
                     const message = `Sorry, too many lines. Maximum is ${maxnumlines}, got ${lineCount}`;
                     showModal('failure', "⚠️ Can't test", message, 'Close', null);
                     return;
+                } else {
+                    const error = checkAnswer(answer);
+                    if (error !== '') {
+                        showModal('failure', "⚠️ Error in code", error, 'Close', null);
+                        return;
+                    }
                 }
             }
         }
@@ -1531,8 +1606,10 @@ print("__ROBOTURTLE_GOAL__: " + goalError);
 
         isRunning = true;
         runButton = document.getElementById(runButtonId);
-        runButton.innerText = 'Stop';
-        runButton.style.setProperty('background-color', 'darkred', 'important');
+        if (includeAnswer) {  // Suppress flicker of Start/Stop button when initialising.
+            runButton.innerText = 'Stop';
+            runButton.style.setProperty('background-color', 'darkred', 'important');
+        }
         Sk.misceval.asyncToPromise(
             () => Sk.importMainWithBody("<stdin>", false, fullProg, true),
             {

@@ -293,19 +293,20 @@ class Tester:
         files = {}
 
         error_text = '\n'.join(errors)
+        error_text_html = self.htmlize(error_text)
         # TODO - check if error line numbers are still being corrected in C and matlab
         if self.params['IS_PRECHECK']:
             if mark == 1:
                 prologue = "<p class='precheckresult'>Passed 🙂</p>"
             else:
-                prologue = "<p class='precheckresult'>Failed, as follows.</p>"
+                prologue = f"<p class='precheckresult'>Failed, as follows.</p>{error_text_html}"
         elif errors:
-            prologue = "<div class='coderunner-test-results bad'><h3>Pre-run checks failed</h3>\n"
+            prologue = f"<h3>Pre-run checks failed</h3>{error_text_html}"
         else:
             prologue = ""
 
         if prologue:
-            outcome['prologuehtml'] = prologue + self.htmlize(error_text)
+            outcome['prologuehtml'] = prologue
 
         epilogue = ''
         images = self.get_all_images_html()
