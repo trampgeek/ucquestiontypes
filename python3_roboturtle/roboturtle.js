@@ -508,7 +508,7 @@ print("__ROBOTURTLE_GOAL__: " + goalError);
                         showModal(
                             'success',
                             '🎉 Success!',
-                            `Congratulations - you\'ve passed the${last} test!`,
+                            `Congratulations - you\'ve passed the${last} test!  Click "Submit for grading" to have your effort recorded.`,
                             'Awesome!',
                             null
                         );
