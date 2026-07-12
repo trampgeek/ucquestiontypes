@@ -1,0 +1,34 @@
+<div class="coderunner-test-results good">
+    <a class="btn btn-link coderunner-ai-feedback-link" style="background-color:#CFC">Show AI feedback</a>
+</div>
+<div class="coderunner-ai-feedback collapse" expanded="false" style="margin-bottom:8px">
+    <div style="white-space: pre-wrap; padding: 8px; background-color: #fff; border: 1px solid #ddd; border-radius: 4px;">%s</div>
+</div>
+<script>
+    window.coderunner_ai_feedback_link_clicked = window.coderunner_ai_feedback_link_clicked || function(src) {
+        var question = src.target.closest('div.specificfeedback');
+        var feedback_div = question.getElementsByClassName('coderunner-ai-feedback')[0];
+        var feedback_link = question.getElementsByClassName('coderunner-ai-feedback-link')[0];
+
+        if (!feedback_div.classList.contains('collapsing')) {
+            if (feedback_div.getAttribute("expanded") === "true") {
+                feedback_link.innerHTML = "Show AI feedback";
+                feedback_div.style.display = "none";
+                feedback_div.setAttribute("expanded", "false");
+            } else {
+                feedback_link.innerHTML = "Hide AI feedback";
+                feedback_div.style.display = "block";
+                feedback_div.setAttribute("expanded", "true");
+            }
+        }
+    }
+    var coderunner_ai_feedback_links = document.getElementsByClassName('coderunner-ai-feedback-link');
+
+    for (var i = 0; i < coderunner_ai_feedback_links.length; i++) {
+        var el = coderunner_ai_feedback_links[i];
+        if (!el.classList.contains('has-ai-click-handler')) {
+            el.addEventListener('click', window.coderunner_ai_feedback_link_clicked);
+            el.classList.add('has-ai-click-handler');
+        }
+    }
+</script>

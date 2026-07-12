@@ -67,6 +67,13 @@ function toggleRoboTurtleHelp(textareaId) {
 </textarea>
 <button type="button" id="___textareaId____answer_prev-btn" style="margin:6px; margin-right:10px; padding:2px 8px;border-radius:10px;">Previous test</button>
 <button type="button" id="___textareaId____answer_run-btn" style="margin:6px; margin-right:10px; padding:2px 8px;border-radius:10px;">Run</button>
+<label for="___textareaId___speed-select" style="vertical-align:middle;">Speed:</label>
+<select id="___textareaId___speed-select" style="margin:4px 10px 4px 3px;padding:2px 4px;border-radius:6px;vertical-align:middle;">
+    <option value="0">Fastest</option>
+    <option value="8">Fast</option>
+    <option value="5" selected>Normal</option>
+    <option value="2">Slow</option>
+</select>
 <button type="button" id="___textareaId____answer_next-btn" style="margin:6px; margin-right:10px; padding:2px 8px;border-radius:10px;">Next test</button>
 {% if showhelpbutton is not defined or showhelpbutton %}
 <button type="button" id="___textareaId___toggle-help-btn" style="margin:6px; margin-right:10px; margin-top:13px;padding:2px 8px;border-radius:10px;float:right">RoboTurtle Help</button>

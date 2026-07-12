@@ -22,3 +22,9 @@
     <li><code>object_here()</code> - true if there's an object in the current cell</li>
     <li><code>carries_object()</code> - true if the inventory is non-empty</li>
     <li><code>is_facing_north()</code> - true if the robot is facing north</li></ul>
+    <h5>State-query functions</h5>
+    <ul>
+    <li><code>position()</code> - return the robot's current grid coordinates as an <code>(x, y)</code> tuple</li>
+    <li><code>target_cell()</code> - return the target cell's coordinates as an <code>(x, y)</code> tuple, or <code>None</code> if no target is defined</li>
+    <li><code>facing()</code> - return the robot's current heading as <code>'N'</code>, <code>'S'</code>, <code>'E'</code>, or <code>'W'</code></li>
+    </ul>

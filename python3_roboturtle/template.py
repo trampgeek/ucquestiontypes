@@ -877,6 +877,18 @@ class BotController:
         """Check if the robot is facing north."""
         return self.world.robot_heading == "north"
     
+    def position(self) -> tuple:
+        """Return the robot's current grid coordinates as an (x, y) tuple."""
+        return self.world.robot_position
+
+    def target_cell(self):
+        """Return the target cell's (x, y) tuple, or None if no target is defined."""
+        return getattr(self.world, 'target', None)
+
+    def facing(self) -> str:
+        """Return the robot's heading as 'N', 'S', 'E', or 'W'."""
+        return {'north': 'N', 'south': 'S', 'east': 'E', 'west': 'W'}[self.world.robot_heading]
+
     def print_state(self):
         """Print robot position and heading"""
         print(f"Robot is at {self.world.robot_position} heading {self.world.robot_heading}")
@@ -1067,6 +1079,21 @@ def speed(speed_factor: int):
     """Set the speed from 1 (slow) to 10 (fast). 0 is superfast."""
     _current_world.robot.speed(speed_factor)
 
+def position() -> tuple:
+    """Return the robot's current grid coordinates as an (x, y) tuple."""
+    return _current_controller.position()
+
+
+def target_cell():
+    """Return the target cell's (x, y) tuple, or None if no target is defined."""
+    return _current_controller.target_cell()
+
+
+def facing() -> str:
+    """Return the robot's current heading as 'N', 'S', 'E', or 'W'."""
+    return _current_controller.facing()
+
+
 def print_state():
     """Print where the robot is and its heading"""
     _current_controller.print_state()
@@ -1112,6 +1139,9 @@ def run_tests(testcases: List[Dict[str, Any]], student_code: str, disabled_funct
                 'object_here': object_here,
                 'carries_object': carries_object,
                 'is_facing_north': is_facing_north,
+                'position': position,
+                'target_cell': target_cell,
+                'facing': facing,
                 'speed': speed,
                 'print': lambda *args, **kwargs: None,
                 'print_state': lambda : None,

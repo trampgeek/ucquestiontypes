@@ -25,7 +25,7 @@ STANDARD_PYLINT_OPTIONS = ['--disable=trailing-whitespace,superfluous-parens,' +
                       ] 
 
 
-locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+locale.setlocale(locale.LC_ALL, 'C.UTF-8') 
 
 KNOWN_PARAMS = {
     'abortonerror': True,
@@ -39,6 +39,7 @@ KNOWN_PARAMS = {
     'echostandardinput': True,
     'extra': 'None',
     'failhiddenonlyfract': 0,
+    'failallllmchecks': False,
     'floattolerance': None,
     'forcepylint': False,
     'globalextra': 'None',
@@ -66,6 +67,7 @@ KNOWN_PARAMS = {
     'pylintoptions': [],
     'pylintmatplotlib': False,
     'requiredconstructs': [],
+    'requiredocstrings': {{ (QUIZ.tags is defined and 'requiredocstrings' in QUIZ.tags) ? 'True' : 'False' }},
     'requiredfunctiondefinitions': [],
     'requiredfunctioncalls': [],
     'requiredsubstrings': [],
@@ -73,6 +75,9 @@ KNOWN_PARAMS = {
     'restrictedfiles': {
         'disallow': ['__.*', 'prog.*', 'pytester.py'],
     },
+    'showaifeedbackwhenright': False,
+    'taughtconstructs': ["expressions", "assignment", "functions", "if statements",
+                         "while loops", "for loops", "dictionaries", "files", "classes"],
     'restrictedmodules': {
         'builtins': {
             'onlyallow': []
@@ -117,7 +122,7 @@ KNOWN_PARAMS = {
 
 class TestCase:
     def __init__(self, dict_rep):
-        """Construct a testcase from a dictionary representation obtained via JSON"""
+        """Construct  a testcase from a dictionary representation obtained via JSON"""
         self.testcode = dict_rep['testcode']
         self.stdin = dict_rep['stdin']
         self.expected = dict_rep['expected']
@@ -217,6 +222,7 @@ def process_global_params():
     PARAMS['GLOBAL_EXTRA'] = """{{ QUESTION.globalextra | e('py') }}\n"""
     PARAMS['STEP_INFO'] = json.loads("""{{ QUESTION.stepinfo | json_encode }}""")
     answer = get_answer()
+    PARAMS['AUTHORS_CODE'] = answer
     if answer:
         if PARAMS['STUDENT_ANSWER'].strip() == answer.strip():
             PARAMS['AUTHOR_ANSWER'] = "<p>Your answer is an <i>exact</i> match with the author's solution.</p>"
@@ -227,6 +233,35 @@ def process_global_params():
             PARAMS['AUTHOR_ANSWER_SCRAMBLED'] = (file.read().strip() % html.escape(scrambled(answer))) + "\n"
     else:
         PARAMS['AUTHOR_ANSWER'] = PARAMS['AUTHOR_ANSWER_SCRAMBLED'] = ''
+        
+    # Add the new QUIZ parameters
+    PARAMS['QUIZ_TAGS'] = {{ QUIZ.tags | json_encode }}
+    PARAMS['QUIZ_NAME'] = """{{ QUIZ.name }}"""
+    
+    # If this is an exam, as indicated by the quiz tag 'exam', turn off the
+    # requirement for docstrings unless requiredocstrings is True.
+    # Also turn off docstrings if requiredocstrings is explicitly False.
+    require_docstrings = PARAMS['requiredocstrings']
+    if require_docstrings == False or ('exam' in PARAMS['QUIZ_TAGS'] and not require_docstrings):
+        PARAMS['ruffoptions'].append("--ignore=D1")  # Ignores D100, D101, D102, ...
+
+
+def get_ai_feedback_html(params):
+    """Run the AI feedback tutor on a correct student answer and return the
+       toggle-wrapped HTML. Returns an empty string if no author's solution is
+       available; surfaces any feedback failure as a short message instead of
+       raising, so the question still grades cleanly.
+    """
+    if not params['AUTHORS_CODE']:
+        return ''
+    try:
+        import __codefeedback as codefeedback
+        feedback_text = codefeedback.CodeFeedback().get_feedback(
+            params['STUDENT_ANSWER'], params['AUTHORS_CODE'], params['taughtconstructs'])
+    except Exception as e:
+        feedback_text = f"Sorry, AI feedback is unavailable ({e})."
+    with open("__ai_feedback.html") as file:
+        return file.read().strip() % html.escape(feedback_text)
 
 
 def update_test_cases(test_cases, outcome):
@@ -286,9 +321,12 @@ if test_cases:
     parsons_threshold = float('inf') if PARAMS['parsonsproblemthreshold'] is None else PARAMS['parsonsproblemthreshold']
     if outcome['fraction'] != 1 and not PARAMS['IS_PRECHECK'] and PARAMS['STEP_INFO']['numchecks'] + 1 >= parsons_threshold:
         feedback = PARAMS['AUTHOR_ANSWER_SCRAMBLED']
-    elif outcome['fraction'] == 1 and PARAMS['showfeedbackwhenright'] and not (PARAMS['IS_PRECHECK']):
-        outcome['prologuehtml'] = '<pre class="ace-highlight-code" style="display:none"></pre>'  # Kick filter into life
-        feedback = PARAMS['AUTHOR_ANSWER']
+    elif outcome['fraction'] == 1 and not PARAMS['IS_PRECHECK']:
+        if PARAMS['showfeedbackwhenright']:
+            outcome['prologuehtml'] = '<pre class="ace-highlight-code" style="display:none"></pre>'  # Kick filter into life
+            feedback = PARAMS['AUTHOR_ANSWER']
+        if PARAMS['showaifeedbackwhenright']:
+            feedback += get_ai_feedback_html(PARAMS)
     if feedback:
         if 'epiloguehtml' in outcome:
             if outcome['epiloguehtml'].strip():

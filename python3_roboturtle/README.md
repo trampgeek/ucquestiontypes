@@ -11,6 +11,9 @@ python-in-the-browser package.
 
 ## Files
 
+  * PROTOTYPE_python3_roboturtle.xml - a ready to import XML export of the question type. Sufficient by itself (once
+    the skulpt plugin has been added to Moodle) to provide usable questions, but not suitable for editing.
+    
   * build.py - the Python program that builds prototypeextra.html and template.py, which are the two modules whose
    contents need to be manually copied into the question prototype.
 

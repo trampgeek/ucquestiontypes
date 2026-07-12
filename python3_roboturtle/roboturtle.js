@@ -59,6 +59,8 @@ window._skulptLoader.load().then(() => {
     let goalErrorMessage = null;
     let runCount = 0;
     let runHeaderAdded = false;
+    let lastAppliedSpeed = -1;
+    const speedStorageKey = 'roboturtle_speed';
 
     /* Input/Output functions to use with Skulpt */
     function outf(text) {
@@ -251,6 +253,32 @@ window._skulptLoader.load().then(() => {
         };
     }
 
+    // Speed control — must be initialised before runSkulptWhenFree() because the
+    // "*" yield handler fires synchronously during the initial grid draw.
+    // Global localStorage key so the setting persists across all RoboTurtle questions.
+    const speedSelect = document.getElementById("___textareaId___speed-select");
+    const savedSpeed = localStorage.getItem(speedStorageKey);
+    if (savedSpeed !== null) {
+        speedSelect.value = savedSpeed;
+    }
+    speedSelect.addEventListener('change', () => {
+        localStorage.setItem(speedStorageKey, speedSelect.value);
+    });
+
+    let pySpeedFn = null; // Cached reference to Python's speed() function; discovered on first success.
+
+    function applySpeedToTurtle(n) {
+        try {
+            // Find the speed function.
+            if (Sk.globals?.['speed'] && Sk.globals?.['load_world']) {
+                pySpeedFn = Sk.globals['speed'];
+            }
+            if (!pySpeedFn) return;
+
+            Sk.misceval.callsimArray(pySpeedFn, [new Sk.builtin.int_(n)]);
+        } catch (_) { pySpeedFn = null; }
+    }
+
     runSkulptWhenFree(false); // Display the initial state
     updateTestButtons(); // Set initial button states
 
@@ -393,6 +421,7 @@ window._skulptLoader.load().then(() => {
     function runSkulpt(includeAnswer) {
         // Reset goal status capture
         goalErrorMessage = '';
+        lastAppliedSpeed = -1;  // Force speed to be applied on first yield of this run
 
         /* Skulpt configuration */
         Sk.configure({
@@ -439,6 +468,7 @@ tests_json = """${testsJson}
 """
 tests = json.loads(tests_json)
 world = load_world(tests[${currentTest}])
+speed(${Number(speedSelect.value)})
 `;
         // The 'disabledfunctions' template parameter can be used to disable specific functions
         // so students have to implement their own.
@@ -479,6 +509,11 @@ print("__ROBOTURTLE_GOAL__: " + goalError);
             {
               "*": () => {
                     if (stopExecution) throw "Interrupted...";
+                    const n = Number(speedSelect.value);
+                    if (n !== lastAppliedSpeed) {
+                        applySpeedToTurtle(n);
+                        lastAppliedSpeed = n;
+                    }
                 }
             }
         ).then(() => {
@@ -572,6 +607,7 @@ print("__ROBOTURTLE_GOAL__: " + goalError);
     }
     const checkButton = document.getElementById(checkButtonId);
     if (checkButton) {
-        checkButton.textContent = "Submit for grading";
+        const newText = "Submit for grading";
+        checkButton.tagName === 'INPUT' ? checkButton.value = newText: checkButton.textContent = newText;
     }
 });

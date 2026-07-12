@@ -1,0 +1,109 @@
+<h3 id="yui_3_18_1_1_1779526577860_1962">Note to would-be editors</h3>
+<p>This is a very complex question type with a lot of code replicated in the template and prototype extra fields. To edit, download the source code from <a href="https://github.com/trampgeek/ucquestiontypes/tree/main/python3_roboturtle">python3_roboturtle in the ucquestiontypes repository</a> on github. The functionality is broken into 10 or more files, and a <em>build.py</em> program is used to generate the content for the template and prototype extra fields.</p>
+<h3>About this question type</h3>
+<p>The RobotTurtle question type uses the Python Turtle to implement a variant of Reeborg's World - see https://reeborg.ca/reeborg.html. Students have to write code that gets the RobotTurtle to perform some task specified in the question text, such as moving to a specified target point, or picking up a number of items and taking them to a specified location.</p>
+<h5>Commands (all global functions) are:</h5>
+<ul>
+<li>move() - move one cell forward</li>
+<li>turn_left() - rotate 90 degrees counterclockwise</li>
+<li>turn_right() - rotate 90 degrees clockwise</li>
+<li>take() - pick up an item from the current cell and place it in the inventory</li>
+<li>put() - place the least-recently-picked up object in the current cell</li>
+<li>toss() - place the least-recently-picked up object in the cell directly in front of the current cell.</li>
+<li>build_wall() - build a wall directly in front of the robot, i.e. at the edge of the current cell in the direction the robot is facing.</li>
+<li>print_state() - output the robot's location and heading.</li>
+</ul>
+<h5>State-checking boolean functions</h5>
+<ul>
+<li>at_goal() - true if the robot is at its final goal position</li>
+<li>front_is_clear() - true if the robot is able to move forward</li>
+<li>right_is_clear() - true if the cell to the right is clear</li>
+<li>wall_in_front() - true if there's a wall in front</li>
+<li>wall_on_right() - true if there's a wall to the right</li>
+<li>object_here() - true if there's an object in the current cell</li>
+<li>carries_object() - true if the inventory is non-empty</li>
+<li>is_facing_north() - true if the robot is facing north</li>
+</ul>
+<h3>Authoring RobotTurtle questions</h3>
+<h5><strong>IMPORTANT: </strong></h5>
+<ol>
+<li><strong>You <em>must</em> check TwigAll or you'll get inexplicable error messages!</strong></li>
+<li><strong>You cannot (easily) enter the Answer (or the Preload) directly. You will need to Preview the question, use Ctrl+Alt+m to disable the UI, and copy and paste the answer from the preview back into the authoring form.</strong></li>
+</ol>
+<h5><strong>Template Parameters</strong></h5>
+<ul>
+<li>testcases - a JSON list of one of more tests as below. REQUIRED.</li>
+<li>disabledfunctions - a list of the names of the functions from the above list that are not allowed to be used.</li>
+</ul>
+<h5><strong>The format of a testcase</strong></h5>
+<p>The question template parameter field must define a parameter testcases, which is a JSON list of one or more tests. Each test is a JSON object with the following structure:</p>
+<pre>{<br>  "world_class": "TargetWorld",  # Selected subclass of World - see types of World below<br>  "world_params": [ &nbsp;   # Parameters to pass to World constructor<br>     "labelled_cells": [],  # Fixed icons (each a [location, item_name] pair). <br>  ],<br>  "grid_size": [10, 12], # [rows, columns]<br>  "robot_start": # Initial robot position
+  {<br>&nbsp; &nbsp; "position": [0, 0],<br>&nbsp; &nbsp; "heading": "north"<br>  },<br>  "walls": [], # Each wall is [[x1, y1], [x2, y2]]<br>  "blocked_cells": [], # Filled-in cells<br>  "items": []  # Items.<br>}</pre>
+<p>Items is a list of items, each consisting of the form:</p>
+<pre>{&nbsp; &nbsp;
+  "type": "leaf",&nbsp; # Item type
+  "position": [5, 7],&nbsp; # Which cell or the value "inventory"&nbsp;
+  "count": 3&nbsp; # Number of such items at that cell (or inventory)
+}<br><br>Currently available items types are leaf, key, flag (chequered), house, star, target.<br><br>blocked_cells is a list of rectangular regions each specified as a list of <br>2 element lists - bottom left hand corner and top right.<br><br>An example world:</pre>
+<pre>{
+  "grid_size": [12, 8],
+  "world_class": "TargetWorld",
+  "world_params": {
+    "target": [11, 7],<br>    "cell_size": 70 # Pixels, default is 60.
+  },
+  "robot_start": {
+    "position": [0, 0],
+    "heading": "east"
+  },
+  "walls": [
+    [[0, 4], [8, 4]],
+    [[8, 4], [8, 0]],
+    [[4, 8], [4, 5]]
+  ],
+  "blocked_cells": [
+    [[6, 2], [8, 3]],<br>    [[0, 0], [1, 1]]
+  ],
+  "items": [
+    {
+      "type": "key",
+      "position": [3, 2],
+      "count": 5
+    },
+    {
+      "type": "leaf",
+      "position": [10, 6]
+    },
+    {
+      "type": "star",
+      "position": [5, 7],
+      "count": 2
+    }
+  ]
+}
+</pre>
+<h3>Types of World</h3>
+<p>The subclass of World determines the goal that the user must satisfy to pass the test.&nbsp;</p>
+<h4>TargetWorld</h4>
+<p>A world in which the only goal is for the robot to finish on a specified target location, usually indicated by a chequered flag or a dart-board target.</p>
+<p><i>World Parameters:</i></p>
+<dl>
+<dt>target</dt>
+<dd>The 2-element array specifying the robot's target cell (required)</dd>
+<dt>target_icon</dt>
+<dd>The item type used to label the target cell, usually 'flag' (chequered), 'target' (dart-board style), 'home' or 'house' (where the last two are aliases of each other). Optional, default 'flag'</dd>
+</dl>
+<h4>PathWorld</h4>
+<p>A world in which the robot is required to follow exactly a given path.</p>
+<p><i>World Parameters:</i></p>
+<dl>
+<dt>path</dt>
+<dd>Describes the exact sequence of cells the robot must visit from start to end. It is a list of path segments where each segment is a two-element list of 2-element locations denoting the start and end of the segment. Segments are necessarily either horizontal or vertical. Required.</dd>
+</dl>
+<h4>PickUpItemsWorld</h4>
+<p>A subclass of TargetWorld in which the robot must not only finish at the specified target location but is also required to pick up all items in the grid (specified in the world itself, not the world parameters) except for explicitly listed exceptions. Additionally the robot may be required to park all the collected items at a specified dump location.</p>
+<p><i>World Parameters:</i></p>
+<dl id="yui_3_18_1_1_1779526577860_1961">
+<dt>item_dump</dt>
+<dd>The 2-element array specifying where all collected items must be dumped. If not specified it is required only that the items do not appear in any of the grid cells, which implies they are in the robot's inventory.</dd>
+<dt>exclude_cells</dt>
+<dd id="yui_3_18_1_1_1779526577860_1960">A list of 2-element locations of all cells that contain items that the robot does not need to gather up (so are ignored in the check).</dd></dl>

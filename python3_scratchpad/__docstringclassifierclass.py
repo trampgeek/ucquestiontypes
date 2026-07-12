@@ -11,12 +11,12 @@ import urllib.request
 import urllib.error
 import signal
 
+from __secrets import OPEN_ROUTER_KEY
+
 
 # ======================================
 #  Configuration
 # ======================================
-
-OPEN_ROUTER_KEY = "*************************************"
 
 TIMEOUT = 6     # Hard wall-clock timeout in seconds
 
@@ -27,6 +27,7 @@ MODELS = {
     'ds3.1': "deepseek/deepseek-chat-v3.1:free",
 
     'gemini2.5f': 'google/gemini-2.5-flash',
+    'gemini3.1f': 'google/gemini-3.1-flash-lite',
 
     'gemma2:9b': "google/gemma-2-9b-it",
     'gemma3:4b': "google/gemma-3n-e4b-it:free",  # Very limited use
@@ -62,6 +63,7 @@ FUNCTION_SYSTEM_PROMPT = open("function_system_prompt.txt").read()
 PROGRAM_SYSTEM_PROMPT   = open("program_system_prompt.txt").read()
 
 DEFAULT_MODEL = 'gemma3:27b-cosc'
+DEFAULT_MODEL = 'gemini3.1f'
 
 
 # ======================================
@@ -91,7 +93,7 @@ class DocstringClassifier:
         if model.endswith('-local'):
             self.base_url = "http://localhost:11434/v1"
         elif model.endswith('-cosc'):
-            self.base_url = "http://cs25005IY:11434/v1"
+            self.base_url = "http://132.181.10.39:11434/v1"
         else:
             self.base_url = "https://openrouter.ai/api/v1"
 
@@ -129,7 +131,7 @@ class DocstringClassifier:
         if len(docstring.split()) < 3:
             return "INVALID - docstring must have at least 3 words."
         if not use_llm:
-            return "VALID - but only because we're not using the LLM"
+            return "VALID - but not checked by the LLM"
         return self.ask_llm(function_string, self.function_system_prompt)
 
 
@@ -158,11 +160,15 @@ class DocstringClassifier:
                 "model": MODELS[self.model],
                 "temperature": 0.0,
                 "seed": 1,
-                "max_tokens": 1000,
+                "max_tokens": 100,
                 "messages": [
                     {
+                        "role": "system",
+                        "content": f"{system_prompt}",
+                    },
+                    {
                         "role": "user",
-                        "content": f"{system_prompt}\n{code}",
+                        "content": f"{code}",
                     }
                 ],
                 "provider": {"zdr": True},
@@ -186,18 +192,18 @@ class DocstringClassifier:
                 return msg.strip()
 
         except RequestTimeout:
-            return "VALID - but only because the request timed out"
+            return "VALID - but not LLM checked (timed out)"
 
         except urllib.error.URLError as e:
             # Catch timeout-like cases robustly
             if "timed out" in str(e).lower() or "timeout" in str(e).lower():
-                return "VALID - but only because the request timed out"
-            return f"VALID - but only because the request raised an exception '{e}'"
+                return "VALID - but not LLM checked (timed out)"
+            return f"VALID - but not LLM checked (the request raised a URLError '{e}')"
 
         except Exception as e:
             if "timed out" in str(e).lower():
                 return "VALID - but only because the request timed out"
-            return f"VALID - but only because the request raised an exception '{e}'"
+            return f"VALID - but not LLM checked (the request raised an exception '{e}')"
 
         finally:
             # Always clean up

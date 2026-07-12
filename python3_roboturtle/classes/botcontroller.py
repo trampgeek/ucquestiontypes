@@ -300,6 +300,18 @@ class BotController:
         """Check if the robot is facing north."""
         return self.world.robot_heading == "north"
     
+    def position(self) -> tuple:
+        """Return the robot's current grid coordinates as an (x, y) tuple."""
+        return self.world.robot_position
+
+    def target_cell(self):
+        """Return the target cell's (x, y) tuple, or None if no target is defined."""
+        return getattr(self.world, 'target', None)
+
+    def facing(self) -> str:
+        """Return the robot's heading as 'N', 'S', 'E', or 'W'."""
+        return {'north': 'N', 'south': 'S', 'east': 'E', 'west': 'W'}[self.world.robot_heading]
+
     def print_state(self):
         """Print robot position and heading"""
         print(f"Robot is at {self.world.robot_position} heading {self.world.robot_heading}")

@@ -834,6 +834,18 @@ class BotController:
         """Check if the robot is facing north."""
         return self.world.robot_heading == "north"
     
+    def position(self) -> tuple:
+        """Return the robot's current grid coordinates as an (x, y) tuple."""
+        return self.world.robot_position
+
+    def target_cell(self):
+        """Return the target cell's (x, y) tuple, or None if no target is defined."""
+        return getattr(self.world, 'target', None)
+
+    def facing(self) -> str:
+        """Return the robot's heading as 'N', 'S', 'E', or 'W'."""
+        return {'north': 'N', 'south': 'S', 'east': 'E', 'west': 'W'}[self.world.robot_heading]
+
     def print_state(self):
         """Print robot position and heading"""
         print(f"Robot is at {self.world.robot_position} heading {self.world.robot_heading}")
@@ -1024,6 +1036,21 @@ def speed(speed_factor: int):
     """Set the speed from 1 (slow) to 10 (fast). 0 is superfast."""
     _current_world.robot.speed(speed_factor)
 
+def position() -> tuple:
+    """Return the robot's current grid coordinates as an (x, y) tuple."""
+    return _current_controller.position()
+
+
+def target_cell():
+    """Return the target cell's (x, y) tuple, or None if no target is defined."""
+    return _current_controller.target_cell()
+
+
+def facing() -> str:
+    """Return the robot's current heading as 'N', 'S', 'E', or 'W'."""
+    return _current_controller.facing()
+
+
 def print_state():
     """Print where the robot is and its heading"""
     _current_controller.print_state()
@@ -1095,6 +1122,12 @@ function toggleRoboTurtleHelp(textareaId) {
     <li><code>object_here()</code> - true if there's an object in the current cell</li>
     <li><code>carries_object()</code> - true if the inventory is non-empty</li>
     <li><code>is_facing_north()</code> - true if the robot is facing north</li></ul>
+    <h5>State-query functions</h5>
+    <ul>
+    <li><code>position()</code> - return the robot's current grid coordinates as an <code>(x, y)</code> tuple</li>
+    <li><code>target_cell()</code> - return the target cell's coordinates as an <code>(x, y)</code> tuple, or <code>None</code> if no target is defined</li>
+    <li><code>facing()</code> - return the robot's current heading as <code>'N'</code>, <code>'S'</code>, <code>'E'</code>, or <code>'W'</code></li>
+    </ul>
 </div> 
 
 <div>
@@ -1104,6 +1137,13 @@ function toggleRoboTurtleHelp(textareaId) {
 </textarea>
 <button type="button" id="___textareaId____answer_prev-btn" style="margin:6px; margin-right:10px; padding:2px 8px;border-radius:10px;">Previous test</button>
 <button type="button" id="___textareaId____answer_run-btn" style="margin:6px; margin-right:10px; padding:2px 8px;border-radius:10px;">Run</button>
+<label for="___textareaId___speed-select" style="vertical-align:middle;">Speed:</label>
+<select id="___textareaId___speed-select" style="margin:4px 10px 4px 3px;padding:2px 4px;border-radius:6px;vertical-align:middle;">
+    <option value="0">Fastest</option>
+    <option value="8">Fast</option>
+    <option value="5" selected>Normal</option>
+    <option value="2">Slow</option>
+</select>
 <button type="button" id="___textareaId____answer_next-btn" style="margin:6px; margin-right:10px; padding:2px 8px;border-radius:10px;">Next test</button>
 {% if showhelpbutton is not defined or showhelpbutton %}
 <button type="button" id="___textareaId___toggle-help-btn" style="margin:6px; margin-right:10px; margin-top:13px;padding:2px 8px;border-radius:10px;float:right">RoboTurtle Help</button>
@@ -1195,6 +1235,8 @@ window._skulptLoader.load().then(() => {
     let goalErrorMessage = null;
     let runCount = 0;
     let runHeaderAdded = false;
+    let lastAppliedSpeed = -1;
+    const speedStorageKey = 'roboturtle_speed';
 
     /* Input/Output functions to use with Skulpt */
     function outf(text) {
@@ -1387,6 +1429,32 @@ window._skulptLoader.load().then(() => {
         };
     }
 
+    // Speed control — must be initialised before runSkulptWhenFree() because the
+    // "*" yield handler fires synchronously during the initial grid draw.
+    // Global localStorage key so the setting persists across all RoboTurtle questions.
+    const speedSelect = document.getElementById("___textareaId___speed-select");
+    const savedSpeed = localStorage.getItem(speedStorageKey);
+    if (savedSpeed !== null) {
+        speedSelect.value = savedSpeed;
+    }
+    speedSelect.addEventListener('change', () => {
+        localStorage.setItem(speedStorageKey, speedSelect.value);
+    });
+
+    let pySpeedFn = null; // Cached reference to Python's speed() function; discovered on first success.
+
+    function applySpeedToTurtle(n) {
+        try {
+            // Find the speed function.
+            if (Sk.globals?.['speed'] && Sk.globals?.['load_world']) {
+                pySpeedFn = Sk.globals['speed'];
+            }
+            if (!pySpeedFn) return;
+
+            Sk.misceval.callsimArray(pySpeedFn, [new Sk.builtin.int_(n)]);
+        } catch (_) { pySpeedFn = null; }
+    }
+
     runSkulptWhenFree(false); // Display the initial state
     updateTestButtons(); // Set initial button states
 
@@ -1529,6 +1597,7 @@ window._skulptLoader.load().then(() => {
     function runSkulpt(includeAnswer) {
         // Reset goal status capture
         goalErrorMessage = '';
+        lastAppliedSpeed = -1;  // Force speed to be applied on first yield of this run
 
         /* Skulpt configuration */
         Sk.configure({
@@ -1575,6 +1644,7 @@ tests_json = """${testsJson}
 """
 tests = json.loads(tests_json)
 world = load_world(tests[${currentTest}])
+speed(${Number(speedSelect.value)})
 `;
         // The 'disabledfunctions' template parameter can be used to disable specific functions
         // so students have to implement their own.
@@ -1615,6 +1685,11 @@ print("__ROBOTURTLE_GOAL__: " + goalError);
             {
               "*": () => {
                     if (stopExecution) throw "Interrupted...";
+                    const n = Number(speedSelect.value);
+                    if (n !== lastAppliedSpeed) {
+                        applySpeedToTurtle(n);
+                        lastAppliedSpeed = n;
+                    }
                 }
             }
         ).then(() => {
@@ -1708,7 +1783,8 @@ print("__ROBOTURTLE_GOAL__: " + goalError);
     }
     const checkButton = document.getElementById(checkButtonId);
     if (checkButton) {
-        checkButton.textContent = "Submit for grading";
+        const newText = "Submit for grading";
+        checkButton.tagName === 'INPUT' ? checkButton.value = newText: checkButton.textContent = newText;
     }
 });
 </script> 

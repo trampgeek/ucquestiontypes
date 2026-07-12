@@ -86,6 +86,21 @@ def speed(speed_factor: int):
     """Set the speed from 1 (slow) to 10 (fast). 0 is superfast."""
     _current_world.robot.speed(speed_factor)
 
+def position() -> tuple:
+    """Return the robot's current grid coordinates as an (x, y) tuple."""
+    return _current_controller.position()
+
+
+def target_cell():
+    """Return the target cell's (x, y) tuple, or None if no target is defined."""
+    return _current_controller.target_cell()
+
+
+def facing() -> str:
+    """Return the robot's current heading as 'N', 'S', 'E', or 'W'."""
+    return _current_controller.facing()
+
+
 def print_state():
     """Print where the robot is and its heading"""
     _current_controller.print_state()

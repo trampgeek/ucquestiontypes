@@ -2,6 +2,7 @@
 
 from io import BytesIO
 import os
+import warnings
 import sys
 import subprocess
 import ast
@@ -58,19 +59,24 @@ class StyleChecker:
         self.model = params.get('llmmodel', MODEL)
         if self.model is None:
             self.model = MODEL
+        self.use_llm = 'exam' not in params.get('QUIZ_TAGS', []) and 'test' not in params.get('QUIZ_TAGS', [])
         self.fail_all_llm_checks = params.get('failallllmchecks', False)
 
     @property
     def tree(self):
         if self._tree is None:
-            self._tree = ast.parse(self.student_answer)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", SyntaxWarning)
+                self._tree = ast.parse(self.student_answer)
         return self._tree
     
     
     def check_function_docstrings(self):
         """Extract all the function docstrings and check
            them. Only the last non-main function is checked
-           properly - the others are checked only for non-triviality
+           properly using an AI, and then only if the parameter
+           QUIZ_TAGS does not contain the tag 'exam'
+           - the others are checked only for non-triviality
            (meaning 'existing and containing at least 3 words').
            Return a list of error messages, empty if none.
         """
@@ -86,12 +92,13 @@ class StyleChecker:
             else:
                 fname = 'Unknown'
 
-            # Use the LLM only on the first function whose name isn't 'main'
+            # Use the LLM only on the first function whose name isn't 'main' and
+            # then only if QUIZ_TAGS doesn't contain 'exam' or 'test'
             if fname == 'main':
                 continue  # We don't require docstrings for main.
 
             t0 = time.perf_counter()
-            validity = classifier.classify_function_docstring(fun, use_llm=not done_one)
+            validity = classifier.classify_function_docstring(fun, use_llm=self.use_llm and not done_one)
             t1 = time.perf_counter()
             done_one = True
             if self.fail_all_llm_checks or validity.startswith('INVALID'):
@@ -118,6 +125,8 @@ class StyleChecker:
             return ["Module docstring: INVALID - no module docstring"]
         elif len(module_docstring.split()) < 3:
             return ["Module docstring:: INVALID - docstring requires at least 3 words"]
+        elif not self.use_llm:
+            return []
         else:
             result = classifier.classify_module_docstring(self.student_answer)
             t1 = time.perf_counter()
