@@ -32,12 +32,6 @@ class PathWorld(World):
                     x += dx
                     i += 1
 
-    def at_goal(self):
-        """True if robot is at the end of the required path, regardless of how 
-           it got there.
-        """
-        return self.robot_position == self.required_path[-1]
-
     def add_path_cell(self, cell):
         """Add the given cell to the path unless it's already the last
            cell (to handle the case of a new segment starting where the

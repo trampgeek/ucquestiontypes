@@ -19,18 +19,20 @@ def turn_right():
     _current_controller.turn_right()
 
 
-def take():
-    """Pick up an item from the current cell."""
-    _current_controller.take()
+def take() -> str:
+    """Pick up an item from the current cell. Returns the item's type name."""
+    return _current_controller.take()
 
 
-def put():
-    """Place an item from inventory into the current cell."""
-    _current_controller.put()
+def put() -> str:
+    """Place an item from inventory into the current cell. Returns the item's type name."""
+    return _current_controller.put()
 
 
-def toss():
-    """Remove an item from inventory without placing it."""
+def toss() -> str:
+    """Toss an item from inventory into the cell directly in front of the robot.
+       Returns the item's type name.
+    """
     return _current_controller.toss()
 
 def get_turtle():
@@ -77,6 +79,13 @@ def carries_object() -> bool:
     return _current_controller.carries_object()
 
 
+def inventory() -> list:
+    """Return a list of the type names of items in the robot's inventory,
+       ordered by when they were picked up, most recently picked up last.
+    """
+    return _current_controller.inventory()
+
+
 def is_facing_north() -> bool:
     """Check if the robot is facing north."""
     return _current_controller.is_facing_north()
@@ -104,3 +113,8 @@ def facing() -> str:
 def print_state():
     """Print where the robot is and its heading"""
     _current_controller.print_state()
+
+
+def send_text(s: str):
+    """Display the given text string in the world's text output area."""
+    _current_controller.send_text(s)

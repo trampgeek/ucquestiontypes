@@ -20,9 +20,6 @@ class TargetWorld(World):
         target_icon = world_params.get('target_icon', 'flag')
         self.labelled_cells.append((self.target, target_icon))
     
-    def at_goal(self):
-        return self.robot_position == self.target
-    
     def check_final_state(self):
         """Check if the robot has reached the target position. If not,
            set self.fail_messages to an explanatory comment.

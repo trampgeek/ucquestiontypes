@@ -3,27 +3,16 @@
 # ============================================================================
 
 from turtle import Turtle #omitfrombuild
+from item_types import ITEM_TYPES, DEFAULT_SYMBOL #omitfrombuild
 
 class Item:
     """Item that can be placed in the grid, displayed using UTF-8 characters."""
 
-    # Map of item names to UTF-8 display characters
-    ITEM_TYPES = {
-        "star": "⭐",
-        "key": "🔑",
-        "leaf": "🍁",
-        "house": "🏠",
-        "home": "🏠",  # Synonym for house
-        "flag": "🏁",
-        "trash": "🗑",
-        "box": "📦",
-        "target": "🎯",
-    }
-    DEFAULT_SYMBOL = "📦"
+    ITEM_TYPES = ITEM_TYPES  # See classes/item_types.py for the actual registry.
 
     def __init__(self, item_type: str):
         self.item_type = item_type
-        self.symbol = self.ITEM_TYPES.get(item_type, self.DEFAULT_SYMBOL)
+        self.symbol = self.ITEM_TYPES.get(item_type, self.ITEM_TYPES[DEFAULT_SYMBOL])
 
     def draw(self, x: float, y: float, cell_size: float):
         """Draw the item using a UTF-8 character."""

@@ -103,17 +103,7 @@ canvas { border: 1px solid #aaa; display: block; background: white; cursor: cros
       <h3>Item</h3>
       <label>Type</label>
       <select id="sel-item-type">
-        <option value="star">⭐ star</option>
-        <option value="key">🔑 key</option>
-        <option value="leaf">🍁 leaf</option>
-        <option value="house">🏠 house</option>
-        <option value="home">🏠 home</option>
-        <option value="flag">🏁 flag</option>
-        <option value="trash">🗑 trash</option>
-        <option value="box">📦 box</option>
-        <option value="target">🎯 target</option>
-        <option value="banana">🍌 banana</option>
-        <option value="apple">🍎 apple</option>
+{ITEM_TYPE_OPTIONS_HTML}
       </select>
       <div class="row" style="margin-top:4px">
         <label>Count <input type="number" id="inp-item-count" min="1" max="99" value="1"></label>
@@ -172,7 +162,7 @@ canvas { border: 1px solid #aaa; display: block; background: white; cursor: cros
 
 const MARGIN = 44;
 const DEFAULT_CS = 60;
-const ITEM_EMOJI = { star:'⭐', key:'🔑', leaf:'🍁', house:'🏠', home:'🏠', flag:'🏁', trash:'🗑', box:'📦', target:'🎯', banana:'🍌', apple:'🍎' };
+const ITEM_EMOJI = {ITEM_EMOJI_JS};
 const FILL_COLOR = '#4CBB17';
 const WALL_COLOR = '#8B0000';
 const ROBOT_COLOR = '#FF6600';

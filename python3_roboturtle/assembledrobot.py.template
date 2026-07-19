@@ -5,6 +5,8 @@ prototypeextra.html file that needs to execute the same code
 using Skulpt.
 """
 
+{INCLUDE:classes/item_types.py}
+
 {INCLUDE:classes/item.py}
 
 {INCLUDE:classes/roboturtle.py}

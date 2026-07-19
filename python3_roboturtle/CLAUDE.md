@@ -8,7 +8,7 @@ RoboTurtle is a Reeborg-inspired Moodle CodeRunner question type that lets stude
 
 ## Build System
 
-**Never edit `prototypeextra.html`, `template.py`, or `assembledrobot.py` directly** — they are generated files.
+**Never edit `prototypeextra.html`, `template.py`, `assembledrobot.py`, or `editor.html` directly** — they are generated files.
 
 All Python logic lives in `classes/`. After changing anything there, rebuild:
 
@@ -16,12 +16,15 @@ All Python logic lives in `classes/`. After changing anything there, rebuild:
 python build.py
 ```
 
-This processes three `.template` files using `{INCLUDE:path}` directives:
+This processes four `.template` files using `{INCLUDE:path}` directives:
 1. `assembledrobot.py.template` → `assembledrobot.py` (all classes concatenated)
 2. `template.py.template` → `template.py` (Jobe server grader, includes assembledrobot + turtle stubs)
 3. `prototypeextra.html.template` → `prototypeextra.html` (browser HTML, includes assembledrobot via Skulpt)
+4. `editor.html.template` → `editor.html` (standalone visual test-case builder; see "World editor" below)
 
 Lines marked `#omitfrombuild` are stripped during the build — they are used for VS Code type checking (e.g., `from turtle import Turtle`) and must not appear in the assembled output.
+
+`build.py` also substitutes two markers, both derived from `classes/item_types.py`: `{ITEM_EMOJI_JS}` (a JS object literal) and `{ITEM_TYPE_OPTIONS_HTML}` (a list of `<option>` elements). `editor.html.template` uses both, so its item pickers can never drift out of sync with `item_types.py` the way they once did by hand.
 
 ## Architecture
 
@@ -36,13 +39,13 @@ The same Python code runs in two environments:
 
 ### Class Hierarchy
 
-- **`Item`** (`classes/item.py`) — collectible object; `ITEM_TYPES` dict maps name → emoji symbol
+- **`Item`** (`classes/item.py`) — collectible object; type names and emoji symbols come from `ITEM_TYPES` in `classes/item_types.py` (kept dependency-free so `build.py` can load it directly)
 - **`RoboTurtle`** (`classes/roboturtle.py`) — extends `turtle.Turtle`; carries an item inventory
-- **`World`** (`classes/world.py`) — base class; manages grid, wall segments, items, rendering; subclasses auto-register via `__init_subclass__` into `World._registry` for factory instantiation
+- **`World`** (`classes/world.py`) — base class; manages grid, wall segments, items, rendering; subclasses auto-register via `__init_subclass__` into `World._registry` for factory instantiation. Also owns the optional **text output** feature (not a subclass — an opt-in available to every world type): if `world_params` contains `expected_texts`, `World` reserves a text bar below the grid, `send_text()` displays the most recent message there, and `check_final_state()` requires `sent_texts == expected_texts`. Subclasses that override `check_final_state()` must call `super().check_final_state()` first so this check still runs. `on_world_loaded()` is a no-op hook, called once by `worldloader.load_world()` after walls/robot/items are all placed but before drawing — `PickUpItemsWorld` uses it to snapshot item counts (items don't exist yet during `__init__`, since `worldloader` adds them afterwards).
   - **`TargetWorld`** — goal: robot reaches a target cell
-  - **`PickUpItemsWorld`** — goal: collect all items (optionally dump them at a location), extends `TargetWorld`
+  - **`PickUpItemsWorld`** — goal: collect all items and (optionally) redeposit them at one or more dump locations (`world_params['item_dumps']`), extends `TargetWorld`. Each dump has a `location`, optional `type` (default `'Any'`), `icon`, and optional `count` — if `count` is omitted it's auto-derived in `on_world_loaded()` from how many matching items exist in the world at load time, so authors don't have to hand-count e.g. "all the leaves". A dump with a non-`'Any'` `type` fails separately if wrong-typed items are found there. The old singular `item_dump: {location, num_items}` format is still accepted (mapped to a single `Any`/`trash` entry in `item_dumps`) if `item_dumps` itself isn't present, for backward compatibility with existing questions.
   - **`PathWorld`** — goal: robot follows an exact required path
-- **`BotController`** (`classes/botcontroller.py`) — command interface wrapping a `World`; implements `move()`, `turn_left/right()`, `take/put/toss()`, `build_wall()`, query methods
+- **`BotController`** (`classes/botcontroller.py`) — command interface wrapping a `World`; implements `move()`, `turn_left/right()`, `take/put/toss()` (each returns the item's type name), `build_wall()`, `inventory()`, `send_text()` (raises if `expected_texts` isn't set), query methods
 - **`worldloader.py`** — `load_world(data)` instantiates the world via `World.create()`, populates it, sets `_current_world` / `_current_controller` globals
 - **`globalcommands.py`** — thin wrappers around `_current_controller` for Reeborg-style global API (`move()`, `turn_left()`, etc.)
 
@@ -80,9 +83,22 @@ After building:
 
 `blocked_cells` entries are `[[x0,y0],[x1,y1]]` corner pairs that expand into rectangular areas. `items` with `"position": "inventory"` start in the robot's inventory.
 
+Any `world_class` can opt into the text-output feature by adding `expected_texts` to `world_params` — an ordered list of strings that the student's code must produce via `send_text()`, e.g. `{"target": [5, 5], "expected_texts": ["Starting", "Done"]}`. This is independent of `world_class`; it works the same for `TargetWorld`, `PickUpItemsWorld`, and `PathWorld`.
+
+`PickUpItemsWorld`'s `item_dumps` example — sort leaves into a trash can and stars into a box, with counts auto-derived from however many of each are placed in `items`:
+```json
+"world_params": {
+  "target": [7, 7],
+  "item_dumps": [
+    {"location": [0, 7], "type": "leaf", "icon": "trash"},
+    {"location": [7, 0], "type": "star", "icon": "box"}
+  ]
+}
+```
+
 ## Extending the Question Type
 
-**Add a new item type:** edit `classes/item.py`, add to `Item.ITEM_TYPES`.
+**Add a new item type:** edit `classes/item_types.py`, add to `ITEM_TYPES`, then `python build.py` (this also regenerates `editor.html`'s item pickers).
 
 **Add a new world type:** create a new file in `classes/`, subclass `World` (or a subclass), override `check_final_state()` to populate `self.fail_messages`. Add `{INCLUDE:classes/yourworld.py}` to `assembledrobot.py.template`.
 

@@ -83,45 +83,51 @@ class BotController:
         self.world.robot_heading = transitions[self.world.robot_heading]
         self.world.robot.right(90)
     
-    def take(self):
-        """Pick up an item from the current cell."""
+    def take(self) -> str:
+        """Pick up an item from the current cell. Returns the item's type name."""
         pos = self.world.robot_position
-        
+
         if pos not in self.world.items or len(self.world.items[pos]) == 0:
             raise RuntimeError(f"Cannot take: no items at position {pos}")
-        
+
         # Remove one item from the cell
         item = self.world.items[pos].pop(0)
         if len(self.world.items[pos]) == 0:
             del self.world.items[pos]
-        
+
         # Add to robot inventory
         self.world.robot.add_item_to_inventory(item)
-        
+
         # Update just the item display at this position
         self.world.update_item_display(pos)
         self.redraw_last = True
+
+        return item.item_type
     
-    def put(self):
-        """Place an item from inventory into the current cell."""
+    def put(self) -> str:
+        """Place an item from inventory into the current cell. Returns the item's type name."""
         if not self.world.robot.has_item():
             raise RuntimeError("Cannot put: robot has no items in inventory")
-        
+
         # Remove item from inventory (just take the first one)
         item = self.world.robot.inventory.pop(0)
-        
+
         # Add to current cell
         pos = self.world.robot_position
         if pos not in self.world.items:
             self.world.items[pos] = []
         self.world.items[pos].append(item)
-        
+
         # Update just the item display at this position
         self.world.update_item_display(pos)
         self.redraw_last = True
-    
-    def toss(self):
-        """Toss an item from inventory into the cell directly in front of the robot."""
+
+        return item.item_type
+
+    def toss(self) -> str:
+        """Toss an item from inventory into the cell directly in front of the robot.
+           Returns the item's type name.
+        """
         if not self.world.robot.has_item():
             raise RuntimeError("Cannot toss: robot has no items in inventory")
 
@@ -156,6 +162,8 @@ class BotController:
         # Update the display at the front position (but don't redraw the path segment)
         self.world.update_item_display(front_pos, False)
         self.redraw_last = True
+
+        return item.item_type
     
     def build_wall(self):
         """Build a wall in front of the robot."""
@@ -295,6 +303,12 @@ class BotController:
     def carries_object(self) -> bool:
         """Check if the robot is carrying any objects."""
         return self.world.robot.has_item()
+
+    def inventory(self) -> list:
+        """Return a list of the type names of items in the robot's inventory,
+           ordered by when they were picked up, most recently picked up last.
+        """
+        return [item.item_type for item in self.world.robot.inventory]
     
     def is_facing_north(self) -> bool:
         """Check if the robot is facing north."""
@@ -315,3 +329,9 @@ class BotController:
     def print_state(self):
         """Print robot position and heading"""
         print(f"Robot is at {self.world.robot_position} heading {self.world.robot_heading}")
+
+    def send_text(self, s: str):
+        """Display the given text string in the world's text output area.
+           Requires 'expected_texts' to have been set in this test's world_params.
+        """
+        self.world.send_text(s)

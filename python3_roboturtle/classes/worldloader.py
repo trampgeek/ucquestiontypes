@@ -90,7 +90,10 @@ def load_world(data) -> World:
                 tuple(position),
                 count
             )
-    
+
+    # Let the world snapshot/derive anything it needs now that it's fully populated.
+    world.on_world_loaded()
+
     # Draw the world
     world.draw_grid()
 

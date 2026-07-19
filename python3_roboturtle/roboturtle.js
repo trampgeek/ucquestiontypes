@@ -243,6 +243,14 @@ window._skulptLoader.load().then(() => {
                 message: "I don't have anything to put down! My inventory is empty.<br><br><strong>Tip:</strong> Use <code>carries_object()</code> to check if you have items before putting."
             };
         }
+        if (errorStr.includes("must take a string as a parameter")) {
+            // No line number: it would point into the library code that raised
+            // this, not the student's own code, so it would only mislead.
+            return {
+                title: "RoboTurtle says: That's not a string!",
+                message: `${errorStr.replace(/\s*on line \d+\s*$/, '')}`
+            };
+        }
 
 
         // Default for unknown errors
@@ -307,6 +315,19 @@ window._skulptLoader.load().then(() => {
         // Disable Next if at last test
         nextButton.disabled = (currentTest >= tests.length - 1);
         nextButton.style.opacity = (currentTest >= tests.length - 1) ? '0.5' : '1';
+
+        updateSendTextHelpVisibility(tests[currentTest]);
+    }
+
+    // send_text() is only usable when the currently-selected test's
+    // world_params defines expected_texts - show/hide its help entry to match.
+    // (The item itself is entirely absent, rather than just hidden, if
+    // disabledfunctions has disabled send_text altogether.)
+    function updateSendTextHelpVisibility(test) {
+        const helpItem = document.getElementById("___textareaId___help-send-text");
+        if (!helpItem) return;
+        const supportsText = !!(test && test.world_params && ('expected_texts' in test.world_params));
+        helpItem.style.display = supportsText ? 'list-item' : 'none';
     }
 
     // Navigate to previous test

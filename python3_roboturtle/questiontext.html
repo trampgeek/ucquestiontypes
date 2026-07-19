@@ -1,0 +1,163 @@
+<h3>Note to would-be editors</h3>
+<p>This is a very complex question type with a lot of code replicated in the template and prototype extra fields. To edit, download the source code from <a href="https://github.com/trampgeek/ucquestiontypes/tree/main/python3_roboturtle">python3_roboturtle in the ucquestiontypes repository</a> on github. The functionality is broken into a dozen or so files, and a <em>build.py</em> program is used to generate the content for the template and prototype extra fields - never edit <code>prototypeextra.html</code>, <code>template.py</code> or <code>assembledrobot.py</code> directly, as they are all generated and will be overwritten.</p>
+
+<h3>About this question type</h3>
+<p>RoboTurtle uses the Python Turtle module to implement a variant of Reeborg's World - see <a href="https://reeborg.ca/reeborg.html">https://reeborg.ca/reeborg.html</a>. Students write code that drives the robot around a grid world to perform some task set by the question, such as moving to a target cell, following an exact path, or collecting items and depositing them at one or more locations.</p>
+
+<h3>Authoring RoboTurtle questions</h3>
+<h5><strong>IMPORTANT:</strong></h5>
+<ol>
+<li><strong>You <em>must</em> check TwigAll or you'll get inexplicable error messages!</strong></li>
+<li><strong>You cannot (easily) enter the Answer (or the Preload) directly. You will need to Preview the question, use Ctrl+Alt+m to disable the UI, and copy and paste the answer from the preview back into the authoring form.</strong></li>
+</ol>
+
+<h5><strong>Use the visual world editor</strong></h5>
+<p>Hand-writing the <code>testcases</code> JSON below is tedious and error-prone. There's a standalone visual editor at <code>python3_roboturtle/editor.html</code> in the repository - download it and open it directly in a browser (it's self-contained; no server or build step needed). It lets you click/drag to place walls, blocked cells, items, item dumps, paths and text-output expectations on a grid matching the live question's rendering, then export the finished JSON straight into the <code>testcases</code> parameter below. It also has Import, so you can paste an existing test case back in to tweak it. This is by far the easiest way to author or edit test cases.</p>
+
+<h5><strong>Template Parameters</strong></h5>
+<ul>
+<li><code>testcases</code> - a JSON list of one or more tests, as described below. REQUIRED.</li>
+<li><code>maxnumlines</code> - the maximum number of (non-blank, non-comment, non-docstring) lines of code allowed in the student's answer. Optional, default 0 (no limit).</li>
+<li><code>disabledfunctions</code> - a list of names, from the command reference below, that the student is not allowed to use (e.g. <code>["build_wall", "toss"]</code>). Optional.</li>
+<li><code>showhelpbutton</code> - set to <code>false</code> to hide the in-question "RoboTurtle Help" button. Optional, default <code>true</code>.</li>
+</ul>
+
+<h3>Commands available to students</h3>
+<p>All of the following are plain global functions, callable directly from student code (e.g. <code>move()</code>, not <code>robot.move()</code>).</p>
+
+<h5>Movement and actions</h5>
+<ul>
+<li><code>move()</code> - move one cell forward. Raises an error if blocked by a wall or a blocked cell.</li>
+<li><code>turn_left()</code> - rotate 90 degrees counterclockwise.</li>
+<li><code>turn_right()</code> - rotate 90 degrees clockwise.</li>
+<li><code>take()</code> - pick up an item from the current cell, add it to the inventory, and <strong>return its type name</strong> (e.g. <code>'star'</code>). Raises an error if there's nothing to take.</li>
+<li><code>put()</code> - place the least-recently-picked-up item from the inventory into the current cell, and <strong>return its type name</strong>. Raises an error if the inventory is empty.</li>
+<li><code>toss()</code> - place the least-recently-picked-up item from the inventory into the cell directly in front of the robot, and <strong>return its type name</strong>. Raises an error if the inventory is empty, the target cell is out of bounds, or it's blocked.</li>
+<li><code>build_wall()</code> - build a wall directly in front of the robot, i.e. at the edge of the current cell in the direction the robot is facing.</li>
+<li><code>send_text(s)</code> - display the string <code>s</code> in a text bar below the grid (only the most recent call's text is shown). Only usable in tests whose <code>world_params</code> includes <code>expected_texts</code> - see "Text output", below. Raises an error otherwise.</li>
+<li><code>speed(n)</code> - set the animation speed, from 1 (slow) to 10 (fast); 0 for fastest possible. Cosmetic only - has no effect on grading.</li>
+<li><code>print_state()</code> / <code>print(...)</code> - print diagnostic output to the on-screen output pane. <strong>Browser-only</strong>: both are silently disabled during actual grading on the Jobe server, so they're useful for a student debugging their own code in the preview, but must never be relied on as part of a test's pass/fail logic. Use <code>send_text()</code> for anything that needs to be checked.</li>
+</ul>
+
+<h5>State-checking boolean functions</h5>
+<ul>
+<li><code>at_goal()</code> - true if the robot has satisfied the world's goal (reached the target, and/or matched the required path, and/or emptied all items into their dump(s), depending on world type).</li>
+<li><code>front_is_clear()</code> - true if the robot is able to move forward.</li>
+<li><code>right_is_clear()</code> - true if the cell to the right is clear.</li>
+<li><code>wall_in_front()</code> - true if there's a wall directly in front.</li>
+<li><code>wall_on_right()</code> - true if there's a wall to the right.</li>
+<li><code>object_here()</code> - true if there's an item in the current cell.</li>
+<li><code>carries_object()</code> - true if the inventory is non-empty.</li>
+<li><code>is_facing_north()</code> - true if the robot is currently facing north.</li>
+</ul>
+
+<h5>State-query functions</h5>
+<ul>
+<li><code>position()</code> - the robot's current grid coordinates as an <code>(x, y)</code> tuple.</li>
+<li><code>facing()</code> - the robot's current heading as <code>'N'</code>, <code>'S'</code>, <code>'E'</code>, or <code>'W'</code>.</li>
+<li><code>target_cell()</code> - the target cell's coordinates as an <code>(x, y)</code> tuple, or <code>None</code> if this world has no target (e.g. a plain <code>PathWorld</code>).</li>
+<li><code>inventory()</code> - a list of the type names of items currently in the inventory, ordered by when they were picked up (most recently picked up last).</li>
+</ul>
+
+<h3>The <code>testcases</code> format</h3>
+<p>The <code>testcases</code> template parameter must be a JSON list of one or more tests. Each test is a JSON object shaped like this (comments added here for explanation - real JSON can't contain comments, so strip them if copying this by hand; using the visual editor avoids the problem entirely):</p>
+<pre>{
+  "world_class": "TargetWorld",       // one of TargetWorld, PathWorld, PickUpItemsWorld - see "Types of World" below
+  "world_params": { },                // parameters specific to world_class, plus optionally cell_size and expected_texts - see below
+  "grid_size": [10, 8],               // [width, height] in cells (NOT [rows, columns])
+  "robot_start": {
+    "position": [0, 0],
+    "heading": "north"                // one of "north", "south", "east", "west"
+  },
+  "walls": [],                        // list of [[x1,y1],[x2,y2]] pairs, each horizontal or vertical
+  "blocked_cells": [],                // list of [[x0,y0],[x1,y1]] rectangle corner pairs (bottom-left, top-right)
+  "items": []                         // see below
+}</pre>
+
+<p>Each entry in <code>items</code> looks like:</p>
+<pre>{
+  "type": "leaf",         // an item type - see "Item types" below
+  "position": [5, 7],     // a cell, or the string "inventory" to start in the robot's inventory
+  "count": 3              // how many such items at that cell/in inventory. Optional, default 1
+}</pre>
+
+<p>Two <code>world_params</code> entries apply regardless of <code>world_class</code>:</p>
+<dl>
+<dt>cell_size</dt>
+<dd>Cell size in pixels. Optional, default 65.</dd>
+<dt>expected_texts</dt>
+<dd>See "Text output", below.</dd>
+</dl>
+
+<h3>Text output</h3>
+<p>Any world type can require the student's code to produce a specific sequence of messages via <code>send_text()</code>. Add <code>expected_texts</code> to <code>world_params</code> - an ordered list of the exact strings the student's code must send, in order, e.g. <code>["Starting", "Done"]</code>. This reserves a text bar below the grid (showing only the most-recently-sent message) and makes <code>at_goal()</code>/the pass condition additionally require <code>send_text()</code> to have been called with exactly that sequence. A handy pattern is to combine this with the return values of <code>take()</code>/<code>put()</code>/<code>toss()</code>, e.g. <code>send_text(f"Picked up {take()}")</code>.</p>
+
+<h3>Item types</h3>
+<p>Available item type names (used for <code>items</code>, <code>target_icon</code>, dump <code>icon</code>/<code>type</code>, and <code>labelled_cells</code>): <code>star</code>, <code>key</code>, <code>leaf</code>, <code>house</code> (alias <code>home</code>), <code>flag</code>, <code>target</code>, <code>box</code>, <code>trash</code>.</p>
+
+<h3>Types of World</h3>
+<p>The <code>world_class</code> determines the goal the student must satisfy to pass a test.</p>
+
+<h4>TargetWorld</h4>
+<p>The robot must finish on a specified target cell.</p>
+<p><i>World Parameters:</i></p>
+<dl>
+<dt>target</dt>
+<dd>The 2-element array specifying the robot's target cell. Required.</dd>
+<dt>target_icon</dt>
+<dd>The item type used to mark the target cell - typically <code>'flag'</code> (chequered), <code>'target'</code> (dart-board), or <code>'house'</code>/<code>'home'</code>. Optional, default <code>'flag'</code>.</dd>
+</dl>
+
+<h4>PathWorld</h4>
+<p>The robot must follow an exact sequence of cells from start to finish.</p>
+<p><i>World Parameters:</i></p>
+<dl>
+<dt>path</dt>
+<dd>The exact sequence of cells the robot must visit, as a list of path segments; each segment is a two-element list of 2-element locations (start and end of that segment). Segments must be horizontal or vertical. Required.</dd>
+</dl>
+
+<h4>PickUpItemsWorld</h4>
+<p>A subclass of <code>TargetWorld</code>: the robot must finish at the target <em>and</em> collect all items in the grid (except explicitly excluded ones), optionally redepositing them at one or more dump locations.</p>
+<p><i>World Parameters:</i></p>
+<dl>
+<dt>item_dumps</dt>
+<dd>A list of dump specifications, each a dictionary with keys:
+  <ul>
+  <li><code>location</code> - the dump's grid cell. Required.</li>
+  <li><code>type</code> - the item type that must end up there, e.g. <code>'leaf'</code>. Optional, default <code>'Any'</code> (accepts any item type).</li>
+  <li><code>icon</code> - the item type used to draw the dump's icon, e.g. <code>'trash'</code> or <code>'box'</code>. Optional, default <code>'trash'</code>.</li>
+  <li><code>count</code> - how many items are expected at the dump. Optional - if omitted, it's auto-derived as the number of matching items (of <code>type</code>, or all items if <code>'Any'</code>) placed anywhere in the world for this test, so e.g. "put all the leaves in the trash" doesn't need hand-counting them.</li>
+  </ul>
+  A dump whose <code>type</code> isn't <code>'Any'</code> fails separately if any wrong-typed item ends up there, as well as if the count is wrong. If <code>item_dumps</code> is omitted entirely, it's only required that no items remain anywhere in the grid (i.e. they're all in the inventory).
+</dd>
+<dt>item_dump <span style="font-weight:normal">(deprecated)</span></dt>
+<dd>The old singular form: <code>{"location": [x, y], "num_items": N}</code>. Still recognised for backward compatibility with existing questions - it's mapped internally to a single-entry <code>item_dumps</code> list with <code>type: 'Any'</code> and <code>icon: 'trash'</code>. Ignored if <code>item_dumps</code> is also present. Don't use this for new questions - use <code>item_dumps</code>. (The visual editor only ever reads/writes <code>item_dumps</code>, converting any old <code>item_dump</code> on import.)</dd>
+<dt>exclude_cells</dt>
+<dd>A list of 2-element locations of cells whose items the robot does <em>not</em> need to gather (ignored by the check).</dd>
+</dl>
+
+<h3>A worked example</h3>
+<p>A <code>PickUpItemsWorld</code> test: collect all keys and leaves, sorting keys into a box and leaves into the trash, then finish at the target - reporting progress via <code>send_text()</code> along the way.</p>
+<pre>{
+  "testcases": [
+    {
+      "grid_size": [8, 6],
+      "world_class": "PickUpItemsWorld",
+      "world_params": {
+        "target": [7, 5],
+        "item_dumps": [
+          {"location": [0, 5], "type": "key",  "icon": "box"},
+          {"location": [7, 0], "type": "leaf", "icon": "trash"}
+        ],
+        "expected_texts": ["Starting", "Done"]
+      },
+      "robot_start": {"position": [0, 0], "heading": "east"},
+      "walls": [[[4, 0], [4, 3]]],
+      "blocked_cells": [[[2, 2], [3, 3]]],
+      "items": [
+        {"type": "key",  "position": [3, 2], "count": 2},
+        {"type": "leaf", "position": [5, 4]}
+      ]
+    }
+  ]
+}</pre>

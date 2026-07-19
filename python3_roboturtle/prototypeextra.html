@@ -21,6 +21,30 @@ using Skulpt.
 """
 
 # ============================================================================
+# Item type registry - the single source of truth for item type names and
+# their emoji symbols. Kept separate from item.py (and dependency-free, no
+# turtle import) so build tooling can load it directly, e.g. to keep
+# editor.html's item pickers in sync without duplicating this list by hand.
+# ============================================================================
+
+ITEM_TYPES = {
+    "star": "⭐",
+    "key": "🔑",
+    "leaf": "🍁",
+    "house": "🏠",
+    "home": "🏠",  # Synonym for house
+    "flag": "🏁",
+    "trash": "🗑",
+    "box": "📦",
+    "target": "🎯",
+    "banana": "🍌",
+    "apple": "🍎",
+}
+
+DEFAULT_SYMBOL = "box"  # Name (not emoji) of the item type used as a fallback for unknown types.
+
+
+# ============================================================================
 # Item Class
 # ============================================================================
 
@@ -28,23 +52,11 @@ using Skulpt.
 class Item:
     """Item that can be placed in the grid, displayed using UTF-8 characters."""
 
-    # Map of item names to UTF-8 display characters
-    ITEM_TYPES = {
-        "star": "⭐",
-        "key": "🔑",
-        "leaf": "🍁",
-        "house": "🏠",
-        "home": "🏠",  # Synonym for house
-        "flag": "🏁",
-        "trash": "🗑",
-        "box": "📦",
-        "target": "🎯",
-    }
-    DEFAULT_SYMBOL = "📦"
+    ITEM_TYPES = ITEM_TYPES  # See classes/item_types.py for the actual registry.
 
     def __init__(self, item_type: str):
         self.item_type = item_type
-        self.symbol = self.ITEM_TYPES.get(item_type, self.DEFAULT_SYMBOL)
+        self.symbol = self.ITEM_TYPES.get(item_type, self.ITEM_TYPES[DEFAULT_SYMBOL])
 
     def draw(self, x: float, y: float, cell_size: float):
         """Draw the item using a UTF-8 character."""
@@ -100,6 +112,9 @@ from collections import defaultdict
 
 DEFAULT_CELL_SIZE = 65
 FILL_COLOUR = "#4CBB17"
+TEXT_BAR_HEIGHT = 40           # Height, in pixels, of the optional text output bar.
+TEXT_LABEL_WIDTH = 70          # Width of the shaded "Text:" label cell.
+TEXT_LABEL_COLOUR = "#c9d6e3"
 
 class World:
     """Base class for a robot world with grid, walls, and items."""
@@ -135,18 +150,28 @@ class World:
         self.path = [] # A list of the cells that the turtle moves into.
         self.labelled_cells = [] # A list of [location, utf8_char] pairs of labelled cells.
         if world_params and 'labelled_cells' in world_params:
-            self.labelled_cells = world_params['labelled_cells']  
+            self.labelled_cells = world_params['labelled_cells']
+
+        # Optional text output area (send_text()), available to any World subclass.
+        # Enabled by the mere presence of 'expected_texts' in world_params (may be an
+        # empty list, e.g. to assert that no text should be sent).
+        self.text_output_enabled = 'expected_texts' in world_params
+        self.expected_texts = world_params.get('expected_texts', [])
+        self.sent_texts = []    # All texts sent, in order - checked against expected_texts.
+        self.current_text = ''  # Most recently sent text - the only one displayed.
 
         # Set up the screen
         self.screen = Screen()
-        self.screen.title("RoboTurtle World")
+        #self.screen.title("RoboTurtle World")  # THIS CLOBBERS THE WINDOW/TAB TITLE!
         
         # Calculate screen size with margins for labels
         margin = 60
+        self.margin = margin
+        extra = self.extra_bottom_height()
         screen_width = self.grid_width * self.cell_size + 2 * margin
-        screen_height = self.grid_height * self.cell_size + 2 * margin
+        screen_height = self.grid_height * self.cell_size + 2 * margin + extra
         self.screen.setup(width=int(screen_width * 0.7), height=int(screen_height * 0.7))
-        self.screen.setworldcoordinates(-margin, -margin,
+        self.screen.setworldcoordinates(-margin, -margin - extra,
                                        self.grid_width * self.cell_size + margin,
                                        self.grid_height * self.cell_size + margin)
         self.screen.tracer(0)  # Disable auto-update for faster drawing
@@ -155,8 +180,22 @@ class World:
         self._add_perimeter_walls()
 
     def at_goal(self):
-        """True if Robot is at its target position. Subclasses must implement."""
-        return False
+        """True if the goal, as defined by check_final_state(), is currently
+           satisfied. Subclasses define the goal by overriding
+           check_final_state() (extending, not replacing, the base
+           implementation) rather than by overriding at_goal() itself.
+        """
+        self.check_final_state()
+        is_at_goal = not self.fail_messages
+        self.fail_messages = []
+        return is_at_goal
+
+    def extra_bottom_height(self):
+        """Extra vertical space (in world-coordinate/pixel units) reserved below
+           the grid's own margin, for the optional text output bar. Called during
+           __init__, before the screen/world-coordinates are set up.
+        """
+        return TEXT_BAR_HEIGHT if self.text_output_enabled else 0
 
 
     def cell_centre(self, cell):
@@ -192,6 +231,15 @@ class World:
         self.add_wall((0, 0), (0, self.grid_height))
         # Right wall
         self.add_wall((self.grid_width, 0), (self.grid_width, self.grid_height))
+
+    def on_world_loaded(self):
+        """Hook called once by worldloader.load_world(), after walls, the robot,
+           and all items have been placed but before the world is first drawn
+           and before any student code runs. Default no-op; overridden by
+           PickUpItemsWorld to snapshot initial item counts for auto-derived
+           dump counts.
+        """
+        pass
 
     def add_blocked_cell(self, position):
         """Mark a cell as blocked (no-go zone)."""
@@ -294,11 +342,89 @@ class World:
                 self.write_item_count(item_list, centre_x, centre_y, drawer)
         
         self.screen.update()
-        
+
         # Re-enable animation after initial grid drawing
         self.screen.tracer(1)
-    
-    
+
+        if self.text_output_enabled:
+            self.draw_text_bar()
+
+
+    def draw_text_bar(self):
+        """(Re)draw the text output bar below the grid, showing only the
+           most recently sent text. No-op if text output isn't enabled.
+        """
+        if not self.text_output_enabled:
+            return
+        bar_top = -self.margin
+        bar_bottom = bar_top - TEXT_BAR_HEIGHT
+        bar_right = self.grid_width * self.cell_size
+
+        drawer = Turtle()
+        drawer.hideturtle()
+        drawer.speed(0)
+
+        # Clear the whole bar, then paint the shaded "Text:" label cell.
+        self._fill_rect(drawer, 0, bar_bottom, bar_right, bar_top, "white")
+        self._fill_rect(drawer, 0, bar_bottom, TEXT_LABEL_WIDTH, bar_top, TEXT_LABEL_COLOUR)
+
+        drawer.penup()
+        drawer.color("black")
+        drawer.goto(TEXT_LABEL_WIDTH / 2, (bar_top + bar_bottom) / 2 - 7)
+        drawer.write("Text:", align="center", font=("Arial", 14, "bold"))
+
+        # Monospace font for the message itself, sized up slightly so its
+        # smaller x-height still reads at roughly the same effective size
+        # as the "Text:" label and the grid's axis labels.
+        drawer.goto(TEXT_LABEL_WIDTH + 10, (bar_top + bar_bottom) / 2 - 7)
+        drawer.write(self.current_text, align="left", font=("Courier New", 15, "normal"))
+
+        self._stroke_rect(drawer, 0, bar_bottom, bar_right, bar_top, "gray")
+
+        self.screen.update()
+
+    def _stroke_rect(self, drawer, x0, y0, x1, y1, colour):
+        """Draw an unfilled outline of the axis-aligned rectangle (x0,y0)-(x1,y1)."""
+        drawer.penup()
+        drawer.goto(x0, y0)
+        drawer.color(colour)
+        drawer.pendown()
+        drawer.goto(x1, y0)
+        drawer.goto(x1, y1)
+        drawer.goto(x0, y1)
+        drawer.goto(x0, y0)
+        drawer.penup()
+
+    def _fill_rect(self, drawer, x0, y0, x1, y1, colour):
+        """Fill the axis-aligned rectangle (x0,y0)-(x1,y1) with the given colour."""
+        drawer.penup()
+        drawer.goto(x0, y0)
+        drawer.color(colour)
+        drawer.fillcolor(colour)
+        drawer.pendown()
+        drawer.begin_fill()
+        drawer.goto(x1, y0)
+        drawer.goto(x1, y1)
+        drawer.goto(x0, y1)
+        drawer.goto(x0, y0)
+        drawer.end_fill()
+        drawer.penup()
+
+    def send_text(self, s: str):
+        """Record a sent text message and update the display to show it.
+           Only the most recent message is ever shown.
+        """
+        if not self.text_output_enabled:
+            raise RuntimeError("send_text() requires 'expected_texts' to be set "
+                                "in this test's world_params")
+        if not isinstance(s, str):
+            raise RuntimeError('"send_text" must take a string as a parameter. '
+                                f'But I got {type(s).__name__}.')
+        self.sent_texts.append(s)
+        self.current_text = s
+        self.draw_text_bar()
+
+
     def create_robot(self, position, heading: str = "north"):
         """Create and position the robot."""
         self.robot = RoboTurtle()
@@ -392,10 +518,31 @@ class World:
     def check_final_state(self):
         """Check if the current world state satisfies the goal. Any errors
            must be appended to self.fail_messages.
-           Override in subclasses.
+           Subclasses should extend (not replace) this, via super().check_final_state(),
+           so the text-output check below still runs.
         """
         self.fail_messages = []
-        return 
+        if self.text_output_enabled and self.sent_texts != self.expected_texts:
+            if len(self.expected_texts) == 1:
+                if len(self.sent_texts) > 1:
+                    self.fail_messages.append(
+                        "I expected just a single text message to be sent, "
+                        "but multiple were received."
+                    )
+                else:
+                    actual = repr(self.sent_texts[0]) if self.sent_texts else "(none sent)"
+                    self.fail_messages.append(
+                        "Text message sent did not match that expected.\n"
+                        f"Expected: {self.expected_texts[0]!r}\n"
+                        f"Actual:   {actual}"
+                    )
+            else:
+                self.fail_messages.append(
+                    "Text messages sent did not match those expected.\n"
+                    f"Expected: {self.expected_texts}\n"
+                    f"Actual:   {self.sent_texts}"
+                )
+        return
 
     def fail_message(self) -> str:
         """Return the empty string if the goal is satisfies or an explanatory string otherwise.
@@ -422,9 +569,6 @@ class TargetWorld(World):
         target_icon = world_params.get('target_icon', 'flag')
         self.labelled_cells.append((self.target, target_icon))
     
-    def at_goal(self):
-        return self.robot_position == self.target
-    
     def check_final_state(self):
         """Check if the robot has reached the target position. If not,
            set self.fail_messages to an explanatory comment.
@@ -441,13 +585,13 @@ class TargetWorld(World):
         super().update_item_display(position, redraw_path_segment)
         self.draw_fixed_icons(position)
 
-"""A subclass of TargetWorld in which all items in the
-    grid except at those explicitly excluded cells are meant to have been
-    collected and (optionally)
-    put down again at a specified location. If there is a specified
-    location for dumping items, it is automatically excluded from
-    the search for items.
+"""A subclass of TargetWorld in which all items in the grid, except those at
+    explicitly excluded cells or item-dump locations, are meant to have been
+    collected and (optionally) redeposited at one or more dump locations.
 """
+
+DEFAULT_DUMP_ICON = "trash"
+ANY_TYPE = "Any"
 
 class PickUpItemsWorld(TargetWorld):
 
@@ -455,30 +599,88 @@ class PickUpItemsWorld(TargetWorld):
         super().__init__(grid_size, world_params)
         exclude = world_params.get('exclude_cells', [])
         self.exclude = set(tuple(loc) for loc in exclude)
-        self.item_dump = world_params.get('item_dump', None)
-        if self.item_dump:
-            dump_location = tuple(self.item_dump['location'])
-            self.exclude.add(dump_location)
-            self.labelled_cells.append((dump_location, "trash"))
+
+        dump_specs = world_params.get('item_dumps', None)
+        if dump_specs is None:
+            # Backward compatibility: map the old singular 'item_dump' format
+            # ({'location': [...], 'num_items': N}) to a single-entry item_dumps list.
+            legacy_dump = world_params.get('item_dump', None)
+            dump_specs = [{
+                'location': legacy_dump['location'],
+                'type': ANY_TYPE,
+                'icon': DEFAULT_DUMP_ICON,
+                'count': legacy_dump.get('num_items', None),
+            }] if legacy_dump is not None else []
+
+        self.item_dumps = []
+        for dump_spec in dump_specs:
+            location = tuple(dump_spec['location'])
+            dump = {
+                'location': location,
+                'type': dump_spec.get('type', ANY_TYPE),
+                'icon': dump_spec.get('icon', DEFAULT_DUMP_ICON),
+                'count': dump_spec.get('count', None),  # None => auto-derive in on_world_loaded()
+            }
+            self.item_dumps.append(dump)
+            self.exclude.add(location)
+            self.labelled_cells.append((location, dump['icon']))
+
         self.fail_messages = []
 
+    def on_world_loaded(self):
+        """Auto-derive the count for any dump that didn't specify one explicitly,
+           from how many matching items exist anywhere in the world right now
+           (called once, after items are placed, before the student's code runs).
+        """
+        super().on_world_loaded()
+        for dump in self.item_dumps:
+            if dump['count'] is None:
+                dump['count'] = self._count_matching_items(dump['type'])
+
+    def _count_matching_items(self, item_type):
+        """Count all items of the given type (or all items, if item_type is
+           ANY_TYPE) currently placed anywhere in the world.
+        """
+        return sum(
+            1
+            for item_list in self.items.values()
+            for item in item_list
+            if item_type == ANY_TYPE or item.item_type == item_type
+        )
+
     def check_final_state(self):
-        """Set self.fail_messages to a list of all faults in the final state
+        """Set self.fail_messages to a list of all faults in the final state.
         """
         super().check_final_state()
+
         for x in range(self.grid_width):
             for y in range(self.grid_height):
                 if (x, y) not in self.exclude:
                     if self.items[(x, y)]:
                         self.fail_messages.append(f"Item(s) found at location ({x}, {y})")
-        item_dump = self.world_params.get('item_dump', None)
-        if item_dump:
-            got = len(self.items[tuple(item_dump['location'])])
-            expected = item_dump['num_items']
-            if got != expected:
-                self.fail_messages.append(f"Expected {expected} items at dump location but got {got}.")
+
+        for dump in self.item_dumps:
+            location = dump['location']
+            expected_type = dump['type']
+            expected_count = dump['count']
+            actual_items = self.items[location]
+
+            if expected_type != ANY_TYPE:
+                wrong_types = [item.item_type for item in actual_items if item.item_type != expected_type]
+                if wrong_types:
+                    self.fail_messages.append(
+                        f"Dump at {location} should contain only '{expected_type}' items "
+                        f"but also found: {wrong_types}"
+                    )
+
+            got = len(actual_items)
+            if got != expected_count:
+                self.fail_messages.append(
+                    f"Expected {expected_count} item(s) at dump location {location} but got {got}."
+                )
 
         return None
+
     
 """ The PathWorld class"""
 
@@ -512,12 +714,6 @@ class PathWorld(World):
                     self.add_path_cell((x, y0))
                     x += dx
                     i += 1
-
-    def at_goal(self):
-        """True if robot is at the end of the required path, regardless of how 
-           it got there.
-        """
-        return self.robot_position == self.required_path[-1]
 
     def add_path_cell(self, cell):
         """Add the given cell to the path unless it's already the last
@@ -617,45 +813,51 @@ class BotController:
         self.world.robot_heading = transitions[self.world.robot_heading]
         self.world.robot.right(90)
     
-    def take(self):
-        """Pick up an item from the current cell."""
+    def take(self) -> str:
+        """Pick up an item from the current cell. Returns the item's type name."""
         pos = self.world.robot_position
-        
+
         if pos not in self.world.items or len(self.world.items[pos]) == 0:
             raise RuntimeError(f"Cannot take: no items at position {pos}")
-        
+
         # Remove one item from the cell
         item = self.world.items[pos].pop(0)
         if len(self.world.items[pos]) == 0:
             del self.world.items[pos]
-        
+
         # Add to robot inventory
         self.world.robot.add_item_to_inventory(item)
-        
+
         # Update just the item display at this position
         self.world.update_item_display(pos)
         self.redraw_last = True
+
+        return item.item_type
     
-    def put(self):
-        """Place an item from inventory into the current cell."""
+    def put(self) -> str:
+        """Place an item from inventory into the current cell. Returns the item's type name."""
         if not self.world.robot.has_item():
             raise RuntimeError("Cannot put: robot has no items in inventory")
-        
+
         # Remove item from inventory (just take the first one)
         item = self.world.robot.inventory.pop(0)
-        
+
         # Add to current cell
         pos = self.world.robot_position
         if pos not in self.world.items:
             self.world.items[pos] = []
         self.world.items[pos].append(item)
-        
+
         # Update just the item display at this position
         self.world.update_item_display(pos)
         self.redraw_last = True
-    
-    def toss(self):
-        """Toss an item from inventory into the cell directly in front of the robot."""
+
+        return item.item_type
+
+    def toss(self) -> str:
+        """Toss an item from inventory into the cell directly in front of the robot.
+           Returns the item's type name.
+        """
         if not self.world.robot.has_item():
             raise RuntimeError("Cannot toss: robot has no items in inventory")
 
@@ -690,6 +892,8 @@ class BotController:
         # Update the display at the front position (but don't redraw the path segment)
         self.world.update_item_display(front_pos, False)
         self.redraw_last = True
+
+        return item.item_type
     
     def build_wall(self):
         """Build a wall in front of the robot."""
@@ -829,6 +1033,12 @@ class BotController:
     def carries_object(self) -> bool:
         """Check if the robot is carrying any objects."""
         return self.world.robot.has_item()
+
+    def inventory(self) -> list:
+        """Return a list of the type names of items in the robot's inventory,
+           ordered by when they were picked up, most recently picked up last.
+        """
+        return [item.item_type for item in self.world.robot.inventory]
     
     def is_facing_north(self) -> bool:
         """Check if the robot is facing north."""
@@ -849,6 +1059,12 @@ class BotController:
     def print_state(self):
         """Print robot position and heading"""
         print(f"Robot is at {self.world.robot_position} heading {self.world.robot_heading}")
+
+    def send_text(self, s: str):
+        """Display the given text string in the world's text output area.
+           Requires 'expected_texts' to have been set in this test's world_params.
+        """
+        self.world.send_text(s)
 
 # ============================================================================
 # World Loading
@@ -938,7 +1154,10 @@ def load_world(data) -> World:
                 tuple(position),
                 count
             )
-    
+
+    # Let the world snapshot/derive anything it needs now that it's fully populated.
+    world.on_world_loaded()
+
     # Draw the world
     world.draw_grid()
 
@@ -969,18 +1188,20 @@ def turn_right():
     _current_controller.turn_right()
 
 
-def take():
-    """Pick up an item from the current cell."""
-    _current_controller.take()
+def take() -> str:
+    """Pick up an item from the current cell. Returns the item's type name."""
+    return _current_controller.take()
 
 
-def put():
-    """Place an item from inventory into the current cell."""
-    _current_controller.put()
+def put() -> str:
+    """Place an item from inventory into the current cell. Returns the item's type name."""
+    return _current_controller.put()
 
 
-def toss():
-    """Remove an item from inventory without placing it."""
+def toss() -> str:
+    """Toss an item from inventory into the cell directly in front of the robot.
+       Returns the item's type name.
+    """
     return _current_controller.toss()
 
 def get_turtle():
@@ -1027,6 +1248,13 @@ def carries_object() -> bool:
     return _current_controller.carries_object()
 
 
+def inventory() -> list:
+    """Return a list of the type names of items in the robot's inventory,
+       ordered by when they were picked up, most recently picked up last.
+    """
+    return _current_controller.inventory()
+
+
 def is_facing_north() -> bool:
     """Check if the robot is facing north."""
     return _current_controller.is_facing_north()
@@ -1054,6 +1282,11 @@ def facing() -> str:
 def print_state():
     """Print where the robot is and its heading"""
     _current_controller.print_state()
+
+
+def send_text(s: str):
+    """Display the given text string in the world's text output area."""
+    _current_controller.send_text(s)
 
 </textarea>
 </div>
@@ -1101,33 +1334,36 @@ function toggleRoboTurtleHelp(textareaId) {
 <h3>RoboTurtle Functions</h3>
     <h5>Commands (all global functions) are:</h5>
     <ul>
-    <li><code>move()</code> - move one cell forward</li>
-    <li><code>turn_left()</code> - rotate 90 degrees counterclockwise</li>
-    <li><code>turn_right()</code> - rotate 90 degrees clockwise</li>
-    <li><code>take()</code> - pick up an item from the current cell and place it in the inventory</li>
-    <li><code>put()</code> - place the least-recently-picked up object in the current cell</li>
-    <li><code>toss()</code> - place the least-recently-picked up object in the cell directly in front of the current cell.</li>
+    {% if 'move' not in disabledfunctions|default([]) %}<li><code>move()</code> - move one cell forward</li>{% endif %}
+    {% if 'turn_left' not in disabledfunctions|default([]) %}<li><code>turn_left()</code> - rotate 90 degrees counterclockwise</li>{% endif %}
+    {% if 'turn_right' not in disabledfunctions|default([]) %}<li><code>turn_right()</code> - rotate 90 degrees clockwise</li>{% endif %}
+    {% if 'take' not in disabledfunctions|default([]) %}<li><code>take()</code> - pick up an item from the current cell, place it in the inventory, and return its type name (e.g. <code>'star'</code>)</li>{% endif %}
+    {% if 'put' not in disabledfunctions|default([]) %}<li><code>put()</code> - place the least-recently-picked up object in the current cell and return its type name</li>{% endif %}
+    {% if 'toss' not in disabledfunctions|default([]) %}<li><code>toss()</code> - place the least-recently-picked up object in the cell directly in front of the current cell, and return its type name</li>{% endif %}
     <!--li><code>build_wall()</code> - build a wall directly in front of the robot, i.e. at the edge of the current cell in the direction the robot is facing.<li-->
-    <li><code>print_state()</code> - print robot position and heading.</li>
-    <li><code>speed(n)</code> - set speed to n where n in range 1 - 10 (slow to fast). n = 0 for max possible speed.</li>
-    </li>
+    {% if 'send_text' not in disabledfunctions|default([]) %}<li id="___textareaId___help-send-text" style="display:none"><code>send_text(s)</code> - display the string <code>s</code> in the text bar below the grid (only usable if this test supports it)</li>{% endif %}
+    {% if 'print_state' not in disabledfunctions|default([]) %}<li><code>print_state()</code> - print robot position and heading.</li>{% endif %}
+    {% if 'speed' not in disabledfunctions|default([]) %}<li><code>speed(n)</code> - set speed to n where n in range 1 - 10 (slow to fast). n = 0 for max possible speed.</li>{% endif %}
     </ul>
     <h5>State-checking boolean functions</h5>
     <ul>
-    <li><code>at_goal()</code> - true if the robot is at the specified goal position</li>
-    <li><code>front_is_clear()</code> - true if the robot is able to move forward</li>
-    <li><code>right_is_clear()</code> - true if the cell to the right is clear</li>
-    <li><code>wall_in_front()</code> - true if there's a wall in front</li>
-    <li><code>wall_on_right()</code> - true if there's a wall to the right</li>
-    <li><code>object_here()</code> - true if there's an object in the current cell</li>
-    <li><code>carries_object()</code> - true if the inventory is non-empty</li>
-    <li><code>is_facing_north()</code> - true if the robot is facing north</li></ul>
+    {% if 'at_goal' not in disabledfunctions|default([]) %}<li><code>at_goal()</code> - true if the robot is at the specified goal position</li>{% endif %}
+    {% if 'front_is_clear' not in disabledfunctions|default([]) %}<li><code>front_is_clear()</code> - true if the robot is able to move forward</li>{% endif %}
+    {% if 'right_is_clear' not in disabledfunctions|default([]) %}<li><code>right_is_clear()</code> - true if the cell to the right is clear</li>{% endif %}
+    {% if 'wall_in_front' not in disabledfunctions|default([]) %}<li><code>wall_in_front()</code> - true if there's a wall in front</li>{% endif %}
+    {% if 'wall_on_right' not in disabledfunctions|default([]) %}<li><code>wall_on_right()</code> - true if there's a wall to the right</li>{% endif %}
+    {% if 'object_here' not in disabledfunctions|default([]) %}<li><code>object_here()</code> - true if there's an object in the current cell</li>{% endif %}
+    {% if 'carries_object' not in disabledfunctions|default([]) %}<li><code>carries_object()</code> - true if the inventory is non-empty</li>{% endif %}
+    {% if 'is_facing_north' not in disabledfunctions|default([]) %}<li><code>is_facing_north()</code> - true if the robot is facing north</li>{% endif %}
+    </ul>
     <h5>State-query functions</h5>
     <ul>
-    <li><code>position()</code> - return the robot's current grid coordinates as an <code>(x, y)</code> tuple</li>
-    <li><code>target_cell()</code> - return the target cell's coordinates as an <code>(x, y)</code> tuple, or <code>None</code> if no target is defined</li>
-    <li><code>facing()</code> - return the robot's current heading as <code>'N'</code>, <code>'S'</code>, <code>'E'</code>, or <code>'W'</code></li>
+    {% if 'position' not in disabledfunctions|default([]) %}<li><code>position()</code> - return the robot's current grid coordinates as an <code>(x, y)</code> tuple</li>{% endif %}
+    {% if 'target_cell' not in disabledfunctions|default([]) %}<li><code>target_cell()</code> - return the target cell's coordinates as an <code>(x, y)</code> tuple, or <code>None</code> if no target is defined</li>{% endif %}
+    {% if 'inventory' not in disabledfunctions|default([]) %}<li><code>inventory()</code> - return a list of the type names of items in the inventory, ordered by when they were picked up (most recently picked up last)</li>{% endif %}
+    {% if 'facing' not in disabledfunctions|default([]) %}<li><code>facing()</code> - return the robot's current heading as <code>'N'</code>, <code>'S'</code>, <code>'E'</code>, or <code>'W'</code></li>{% endif %}
     </ul>
+
 </div> 
 
 <div>
@@ -1419,6 +1655,14 @@ window._skulptLoader.load().then(() => {
                 message: "I don't have anything to put down! My inventory is empty.<br><br><strong>Tip:</strong> Use <code>carries_object()</code> to check if you have items before putting."
             };
         }
+        if (errorStr.includes("must take a string as a parameter")) {
+            // No line number: it would point into the library code that raised
+            // this, not the student's own code, so it would only mislead.
+            return {
+                title: "RoboTurtle says: That's not a string!",
+                message: `${errorStr.replace(/\s*on line \d+\s*$/, '')}`
+            };
+        }
 
 
         // Default for unknown errors
@@ -1483,6 +1727,19 @@ window._skulptLoader.load().then(() => {
         // Disable Next if at last test
         nextButton.disabled = (currentTest >= tests.length - 1);
         nextButton.style.opacity = (currentTest >= tests.length - 1) ? '0.5' : '1';
+
+        updateSendTextHelpVisibility(tests[currentTest]);
+    }
+
+    // send_text() is only usable when the currently-selected test's
+    // world_params defines expected_texts - show/hide its help entry to match.
+    // (The item itself is entirely absent, rather than just hidden, if
+    // disabledfunctions has disabled send_text altogether.)
+    function updateSendTextHelpVisibility(test) {
+        const helpItem = document.getElementById("___textareaId___help-send-text");
+        if (!helpItem) return;
+        const supportsText = !!(test && test.world_params && ('expected_texts' in test.world_params));
+        helpItem.style.display = supportsText ? 'list-item' : 'none';
     }
 
     // Navigate to previous test
