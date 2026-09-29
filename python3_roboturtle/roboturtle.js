@@ -48,6 +48,7 @@ window._skulptLoader.load().then(() => {
     const runButtonId = "___textareaId____answer_run-btn";
     const prevButtonId = "___textareaId____answer_prev-btn";
     const nextButtonId = "___textareaId____answer_next-btn";
+    const testLabelId = "___textareaId___test-label";
     const checkButtonId = "___textareaId___".replace('id_', '').replace("_answer", "_-submit");
 
     const outputElement = document.getElementById(outputElementId); 
@@ -315,6 +316,10 @@ window._skulptLoader.load().then(() => {
         // Disable Next if at last test
         nextButton.disabled = (currentTest >= tests.length - 1);
         nextButton.style.opacity = (currentTest >= tests.length - 1) ? '0.5' : '1';
+
+        // Only show the label when there's more than one test to navigate between.
+        const testLabel = document.getElementById(testLabelId);
+        testLabel.textContent = (tests.length > 1) ? `Test ${currentTest + 1} of ${tests.length}` : '';
 
         updateSendTextHelpVisibility(tests[currentTest]);
     }

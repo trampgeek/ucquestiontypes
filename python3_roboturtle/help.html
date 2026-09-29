@@ -27,6 +27,6 @@
     <ul>
     {% if 'position' not in disabledfunctions|default([]) %}<li><code>position()</code> - return the robot's current grid coordinates as an <code>(x, y)</code> tuple</li>{% endif %}
     {% if 'target_cell' not in disabledfunctions|default([]) %}<li><code>target_cell()</code> - return the target cell's coordinates as an <code>(x, y)</code> tuple, or <code>None</code> if no target is defined</li>{% endif %}
-    {% if 'inventory' not in disabledfunctions|default([]) %}<li><code>inventory()</code> - return a list of the type names of items in the inventory, ordered by when they were picked up (most recently picked up last)</li>{% endif %}
+    {% if 'inventory' not in disabledfunctions|default([]) %}<li><code>inventory()</code> - return a new list containing the type names of items in the inventory, ordered by when they were picked up (most recently picked up last)</li>{% endif %}
     {% if 'facing' not in disabledfunctions|default([]) %}<li><code>facing()</code> - return the robot's current heading as <code>'N'</code>, <code>'S'</code>, <code>'E'</code>, or <code>'W'</code></li>{% endif %}
     </ul>

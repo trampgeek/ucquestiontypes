@@ -4,6 +4,8 @@ import os
 import re
 import html
 import random
+import hashlib
+import base64
 
 from pytester import PyTester
 
@@ -27,8 +29,18 @@ STANDARD_PYLINT_OPTIONS = ['--disable=trailing-whitespace,superfluous-parens,' +
 
 locale.setlocale(locale.LC_ALL, 'C.UTF-8') 
 
+# Affirmation phrases available for AI feedback on correct submissions.
+# NOTE: keep this list in sync with the list quoted in the AI feedback
+# system prompt (search for "ASSIGNED OPENING PHRASE" there).
+AFFIRMATIONS = [
+    "Nice work!", "Ka pai!", "Well done!", "Great job!", "Good stuff",
+    "Nicely done!", "Solid work!", "You've got it!", "Looking good!", "Nice!",
+]
+
 KNOWN_PARAMS = {
     'abortonerror': True,
+    'affirmation': None,
+    'aifeedbackmodel': 'gemini3.1f',
     'allowglobals': False,
     'allownestedfunctions': False,
     'banfunctionredefinitions': True,
@@ -38,11 +50,13 @@ KNOWN_PARAMS = {
     'dpi': 65,
     'echostandardinput': True,
     'extra': 'None',
+    'extrapromptstring': '', 
     'failhiddenonlyfract': 0,
     'failallllmchecks': False,
     'floattolerance': None,
     'forcepylint': False,
     'globalextra': 'None',
+    'ignorequiztags': False, # True to set the global PARAMS['QUIZ_TAGS'] to empty.
     'imagewidth': None,
     'imports': [],
     'isfunction': True,
@@ -75,9 +89,6 @@ KNOWN_PARAMS = {
     'restrictedfiles': {
         'disallow': ['__.*', 'prog.*', 'pytester.py'],
     },
-    'showaifeedbackwhenright': False,
-    'taughtconstructs': ["expressions", "assignment", "functions", "if statements",
-                         "while loops", "for loops", "dictionaries", "files", "classes"],
     'restrictedmodules': {
         'builtins': {
             'onlyallow': []
@@ -104,6 +115,8 @@ KNOWN_PARAMS = {
     'resultcolumns': [], # If not specified, use question's resultcolumns value. See below.
     'ruffoptions': [],
     'runextra': False,
+    'showaifeedbackbutton': {{ (QUIZ.tags is defined and 'showaifeedbackbutton' in QUIZ.tags) ? 'True' : 'False'}},
+    'showaifeedbackwhenright': {{ (QUIZ.tags is defined and 'showaifeedback' in QUIZ.tags) ? 'True' : 'False'}},
     'showfeedbackwhenright': False,
     'stdinfromextra': False,
     'strictwhitespace': True,
@@ -224,29 +237,51 @@ def process_global_params():
     answer = get_answer()
     PARAMS['AUTHORS_CODE'] = answer
     if answer:
-        if PARAMS['STUDENT_ANSWER'].strip() == answer.strip():
-            PARAMS['AUTHOR_ANSWER'] = "<p>Your answer is an <i>exact</i> match with the author's solution.</p>"
-        else:
-            with open("__author_solution.html") as file:
-                PARAMS['AUTHOR_ANSWER'] = (file.read().strip() % html.escape(answer))
+        with open("__author_solution.html") as file:
+            PARAMS['AUTHOR_ANSWER'] = (file.read().strip() % html.escape(answer))
         with open("__author_solution_scrambled.html") as file:
             PARAMS['AUTHOR_ANSWER_SCRAMBLED'] = (file.read().strip() % html.escape(scrambled(answer))) + "\n"
     else:
         PARAMS['AUTHOR_ANSWER'] = PARAMS['AUTHOR_ANSWER_SCRAMBLED'] = ''
         
     # Add the new QUIZ parameters
-    PARAMS['QUIZ_TAGS'] = {{ QUIZ.tags | json_encode }}
+    PARAMS['QUIZ_TAGS'] = [] if PARAMS['ignorequiztags'] else {{ QUIZ.tags | json_encode }}
     PARAMS['QUIZ_NAME'] = """{{ QUIZ.name }}"""
     
     # If this is an exam, as indicated by the quiz tag 'exam', turn off the
     # requirement for docstrings unless requiredocstrings is True.
     # Also turn off docstrings if requiredocstrings is explicitly False.
+    # Similarly, disable showaifeedback during exams.
     require_docstrings = PARAMS['requiredocstrings']
     if require_docstrings == False or ('exam' in PARAMS['QUIZ_TAGS'] and not require_docstrings):
         PARAMS['ruffoptions'].append("--ignore=D1")  # Ignores D100, D101, D102, ...
+    if 'exam' in PARAMS['QUIZ_TAGS']:
+        PARAMS['showaifeedbackwhenright'] = False
+        PARAMS['showaifeedbackbutton'] = False
 
 
-def get_ai_feedback_html(params):
+def choose_affirmation(student_code):
+    """Deterministically pick one phrase from AFFIRMATIONS for this specific
+       submission, using a hash of the student's code as the "random" seed.
+
+       We do this in Python rather than asking the LLM to "choose randomly"
+       because LLMs at temperature 0 (and even otherwise) do not sample
+       uniformly from a list they're merely shown in a prompt — they tend to
+       collapse onto whichever phrase is most probable in context, giving a
+       heavily skewed distribution in practice. Hashing the code guarantees:
+         - the same submission always gets the same phrase (reproducible,
+           consistent with temperature=0 elsewhere in the pipeline), and
+         - phrases are spread ~uniformly across different submissions.
+
+       Used only as a fallback when the question hasn't set a fixed
+       'affirmation' template parameter (see KNOWN_PARAMS).
+    """
+    digest = hashlib.sha256(student_code.encode('utf-8')).hexdigest()
+    index = int(digest, 16) % len(AFFIRMATIONS)
+    return AFFIRMATIONS[index]
+
+
+def get_ai_feedback_inline_html(params):
     """Run the AI feedback tutor on a correct student answer and return the
        toggle-wrapped HTML. Returns an empty string if no author's solution is
        available; surfaces any feedback failure as a short message instead of
@@ -255,14 +290,57 @@ def get_ai_feedback_html(params):
     if not params['AUTHORS_CODE']:
         return ''
     try:
-        import __codefeedback as codefeedback
-        feedback_text = codefeedback.CodeFeedback().get_feedback(
-            params['STUDENT_ANSWER'], params['AUTHORS_CODE'], params['taughtconstructs'])
+        import __codefeedbackinline as codefeedbackinline
+        ai = codefeedbackinline.CodeFeedback(params['aifeedbackmodel'])
+        # The 'affirmation' template parameter lets a question author pin a
+        # fixed opening phrase for this question, just like extrapromptstring
+        # lets them add question-specific guidance. If unset (None, the
+        # default), fall back to the hash-based per-submission choice.
+        chosen_affirmation = params['affirmation']
+        if chosen_affirmation is None:
+            chosen_affirmation = choose_affirmation(params['STUDENT_ANSWER'])
+        feedback_text = ai.get_feedback(
+            params['STUDENT_ANSWER'], params['AUTHORS_CODE'],
+            affirmation=chosen_affirmation,
+            extra_prompt=params['extrapromptstring'])
     except Exception as e:
         feedback_text = f"Sorry, AI feedback is unavailable ({e})."
     with open("__ai_feedback.html") as file:
         return file.read().strip() % html.escape(feedback_text)
 
+def has_ai_opt_out(params):
+    return re.search(r"# *no *ai", params['STUDENT_ANSWER'], flags=re.IGNORECASE) is not None
+
+def get_ai_feedback_button_html(params):
+    """Return the HTML for the 'Show AI feedback' button, with the fully-built
+       prompt text embedded in a hidden field. Returns an empty string if no
+       author's solution is available. The AI itself is never contacted here -
+       that only happens later, from the student's browser, if and when they
+       click the button and have given consent (see __ai_feedback.withbutton.html).
+    """
+    if not params['AUTHORS_CODE']:
+        return ''
+    import __codefeedback as codefeedback
+    # The 'affirmation' template parameter lets a question author pin a
+    # fixed opening phrase for this question, just like extrapromptstring
+    # lets them add question-specific guidance. If unset (None, the
+    # default), fall back to the hash-based per-submission choice.
+    chosen_affirmation = params['affirmation']
+    if chosen_affirmation is None:
+        chosen_affirmation = choose_affirmation(params['STUDENT_ANSWER'])
+    prompt_text = codefeedback.build_combined_prompt(
+        params['STUDENT_ANSWER'], params['AUTHORS_CODE'],
+        affirmation=chosen_affirmation,
+        extra_prompt=params['extrapromptstring'])
+    # Base64-encoded rather than html.escape()d: Moodle's text filters (e.g.
+    # Emoticons) run naive substring substitutions over rendered epiloguehtml
+    # with no awareness of HTML structure, so free-form English text like this
+    # prompt can - and did - get mangled mid-attribute-value (e.g. "range(n)"
+    # became an inline "No" emoticon image, breaking the surrounding tag).
+    # Base64 output is [A-Za-z0-9+/=] only, immune to any such substitution.
+    encoded_prompt = base64.b64encode(prompt_text.encode('utf-8')).decode('ascii')
+    with open("__ai_feedback.withbutton.html") as file:
+        return file.read().strip() % encoded_prompt
 
 def update_test_cases(test_cases, outcome):
     """Return the updated testcases after replacing all empty expected fields with those from the
@@ -325,8 +403,10 @@ if test_cases:
         if PARAMS['showfeedbackwhenright']:
             outcome['prologuehtml'] = '<pre class="ace-highlight-code" style="display:none"></pre>'  # Kick filter into life
             feedback = PARAMS['AUTHOR_ANSWER']
-        if PARAMS['showaifeedbackwhenright']:
-            feedback += get_ai_feedback_html(PARAMS)
+        if PARAMS['showaifeedbackwhenright'] and not has_ai_opt_out(PARAMS):
+            feedback += get_ai_feedback_inline_html(PARAMS)
+        elif PARAMS['showaifeedbackbutton']:
+            feedback += get_ai_feedback_button_html(PARAMS)
     if feedback:
         if 'epiloguehtml' in outcome:
             if outcome['epiloguehtml'].strip():

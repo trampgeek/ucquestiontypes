@@ -483,7 +483,7 @@ class StyleChecker:
                 if node.orelse:
                     constructs_seen.add('while_with_else')
                 self.generic_visit(node)
-            def visit_Comprehension(self, node):
+            def visit_comprehension(self, node):  # lower case is intentional
                 constructs_seen.add('comprehension')
                 self.generic_visit(node)
             def visit_ListComp(self, node):

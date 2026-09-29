@@ -9,6 +9,9 @@ div.cr-test-table-div {
     background-color: #f7faeb;
     padding: 10px;
 }
+table.cr-test-table {
+    max-width: 800px;
+}
 td.cr-test-table-cell {
     padding: 2px;
     font-family:monospace;
@@ -42,21 +45,16 @@ tr.cr-test-table-row {
      * the test table. Parameter is the div in which the table will be built.
      */
     function TestTableBuilder(tableDiv) {
-        this.HEADERS = ['Test', 'Result'];
+        this.HEADERS = ['Input', 'Result'];  // ** TODO ** find a way to make the column 1 label variable
         this.NUM_DATA_COLUMNS = 2;  // Future expansion possible to multiple columns?
 
-        // The HTML UI may already have attempted to restore all the UI values into the test table
-        // and have failed, as the table hadn't been built at that time. In this case, the leftovers
+        // The HTML UI will have attempted to restore all the UI values into the test table
+        // but will have failed, as the table hadn't been built at that time. The leftovers
         // will have been saved in the outer div, so we have to pick them up from there during
-        // the build. Otherwise, just use the original value of the textarea.
-        // I'm not sure what determines the order of events here as it varies with version of
-        // CodeRunner and/or version of Moodle!
+        // the build.
         this.outerDiv = document.getElementById("qtype-coderunner-outer-div-___textareaId___");
-        let data = this.outerDiv.getAttribute('data-leftovers');
-        if (data === null) { // Don't have leftovers. Use original text area contents after all.
-            data = document.getElementById("___textareaId___").value;
-        }
-        this.dataToLoad = data ? JSON.parse(data) : {};
+        const dataLeftovers = this.outerDiv.getAttribute('data-leftovers');
+        this.dataToLoad = dataLeftovers ? JSON.parse(dataLeftovers) : {};
         const sampleName = 'test_table_col0'; // One of the values in dataToLoad.
         this.numRowsToLoad = this.dataToLoad.hasOwnProperty(sampleName) ? this.dataToLoad[sampleName].length : 0;
         this.numRows = Math.max(1, this.numRowsToLoad);
@@ -106,7 +104,7 @@ tr.cr-test-table-row {
     TestTableBuilder.prototype.buildTable = function () {
         this.tableDiv.innerHTML = '';  // Reset the div.
         const table = document.createElement('table');
-        table.classList.add('table-bordered', 'cr-test-table');
+        table.classList.add('table', 'table-bordered', 'cr-test-table');
 
         table.appendChild(this.tableHead());
         const body = document.createElement('tbody');
@@ -137,6 +135,7 @@ tr.cr-test-table-row {
         const cells = t.outerDiv.getElementsByClassName('cr-input-element');
         for (let i = 0; i < cells.length; i++) {
             if (cells[i].value && cells[i].value.indexOf('???') === -1) {
+                //alert("Non empty " + cells[i].ident + ", value = " + cells[i].value + "'");
                 t.readonlys[cells[i].ident] = 1;
             }
         }
@@ -264,11 +263,11 @@ tr.cr-test-table-row {
         hdrLabel.textContent = 'Test table header: ';
         controlPanelDiv.append(hdrLabel);
         controlPanelDiv.append(tableHeaderInput);
-        controlPanelDiv.append(document.createElement('br'));
 
         const linesPerCellInput = document.createElement('input');
         linesPerCellInput.type = 'text';
         linesPerCellInput.value = this.linesPerCell;
+
         linesPerCellInput.onchange = function (evt) {
             const newValue = +evt.target.value;
             if (newValue > 0) {
@@ -279,13 +278,14 @@ tr.cr-test-table-row {
                 t.propagateToSibling();
             }
         };
+
         linesPerCellInput.id = "___textareaId___-lines-per-cell";
         linesPerCellInput.classList.add('cr-test-table-row-count');
-        const linesLabel = document.createElement('label');
-        linesLabel.style.display = 'inline';
-        linesLabel.htmlFor = linesPerCellInput.id;
-        linesLabel.textContent = 'Lines per cell: ';
-        controlPanelDiv.append(linesLabel);
+        const label = document.createElement('label');
+        label.style.display = 'inline';
+        label.htmlFor = linesPerCellInput.id;
+        label.textContent = 'Lines per cell: ';
+        controlPanelDiv.append(label);
         controlPanelDiv.append(linesPerCellInput);
 
         const colWidthInput = document.createElement('input');
@@ -376,5 +376,7 @@ tr.cr-test-table-row {
         M.util.js_complete('qtype_coderunner/userinterfacewrapper');
     });
 
-    document.getElementById('___textareaId___' + '_wrapper').style.resize = 'none';
+
+    document.getElementById('___textareaId___' + '_wrapper').style.resize == 'none';
+
 </script>

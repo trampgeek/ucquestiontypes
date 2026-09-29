@@ -2,6 +2,14 @@
 DocstringClassifier: validates function or module docstrings using an LLM.
 This version uses Linux SIGALRM to enforce a strict wall-clock timeout for
 blocking I/O — ideal for JOBE servers (one job = one Python process).
+
+Restricted to locally-hosted Ollama models only (no cloud/API-key-based
+models) - the earlier version could also route to OpenRouter using
+OPEN_ROUTER_KEY from __secrets.py, but that key sat in the same Jobe sandbox
+as student code, exfiltratable via the unrestricted Scratchpad panel (see
+conversation notes). Rather than build a secure channel to keep using a
+cloud model that wasn't actually in use, this cuts the capability entirely:
+no API key is imported or needed, since local Ollama servers require none.
 """
 
 import ast
@@ -11,8 +19,6 @@ import urllib.request
 import urllib.error
 import signal
 
-from __secrets import OPEN_ROUTER_KEY
-
 
 # ======================================
 #  Configuration
@@ -20,50 +26,24 @@ from __secrets import OPEN_ROUTER_KEY
 
 TIMEOUT = 6     # Hard wall-clock timeout in seconds
 
+# Local-network Ollama models only. Anything else is refused - see __init__.
 MODELS = {
     'dsr1:14b-cosc': "deepseek-r1:14b",
     'dsr1:32b-cosc': "deepseek-r1:32b",
     'dsr1:70b-cosc': "deepseek-r1:70b",
-    'ds3.1': "deepseek/deepseek-chat-v3.1:free",
 
-    'gemini2.5f': 'google/gemini-2.5-flash',
-    'gemini3.1f': 'google/gemini-3.1-flash-lite',
-
-    'gemma2:9b': "google/gemma-2-9b-it",
-    'gemma3:4b': "google/gemma-3n-e4b-it:free",  # Very limited use
-    'gemma3:4b-local': "gemma3:4b",
     'gemma3:12b-cosc': "gemma3:12b",
-    'gemma3:27b': "google/gemma-3-27b-it",
     'gemma3:27b-cosc': "gemma3:27b",
 
-    'gpt4om': 'openai/gpt-4o-mini',
-
-    'llama3.3:8bi': "meta-llama/llama-3.3-8b-instruct",
-    'llama3.3:8b-local': "llama3:8b",
-    'llama3.3:70bi': "meta-llama/llama-3.3-70b-instruct",
-    
-    'mixtral8:7bi': "mistralai/mixtral-8x7b-instruct",
-
-    'qwen2.5:7bci': "qwen/qwen2.5-coder-7b-instruct", # Slow. Reasoning?
-    'qwen3:1.7b-local': "qwen3:1.7b",
-    'qwen3:4b-local': "qwen3:4b",
     'qwen3:4b-cosc': "qwen3:4b",
-    'qwen3:4b': "qwen/qwen3-4b:free",  # Very limited use
-    'qwen3:8b': "qwen/qwen3-8b",  # Reasoning model - slow
     'qwen3:8b-cosc': "qwen3:8b",
-    'qwen3:8bds': "deepseek/deepseek-r1-0528-qwen3-8b:free",
     'qwen3:14b-cosc': "qwen3:14b",
-    'qwen3:30bi': "qwen/qwen3-30b-a3b-instruct-2507",
-    'qwen3:235b': "qwen/qwen3-235b-a22b-2507",
-
-    'sonnet4': "anthropic/claude-sonnet-4",
 }
 
 FUNCTION_SYSTEM_PROMPT = open("function_system_prompt.txt").read()
 PROGRAM_SYSTEM_PROMPT   = open("program_system_prompt.txt").read()
 
 DEFAULT_MODEL = 'gemma3:27b-cosc'
-DEFAULT_MODEL = 'gemini3.1f'
 
 
 # ======================================
@@ -81,23 +61,21 @@ class RequestTimeout(Exception):
 # ======================================
 
 class DocstringClassifier:
-    """Classify docstrings using the given LLM model, which must be 
-       a key in the above models list.
+    """Classify docstrings using the given local Ollama model, which must be
+       a key in the above models list (name ending in '-local' or '-cosc').
     """
     def __init__(self, model=DEFAULT_MODEL):
         self.model = model
         self.function_system_prompt = FUNCTION_SYSTEM_PROMPT + "\nFunction whose docstring is to be classified:\n"
         self.program_system_prompt   = PROGRAM_SYSTEM_PROMPT   + "\nProgram whose module docstring is to be classified:\n"
 
-        # Choose endpoint
-        if model.endswith('-local'):
-            self.base_url = "http://localhost:11434/v1"
-        elif model.endswith('-cosc'):
+        if model.endswith('-cosc'):
             self.base_url = "http://132.181.10.39:11434/v1"
         else:
-            self.base_url = "https://openrouter.ai/api/v1"
-
-        self.api_key = OPEN_ROUTER_KEY
+            raise ValueError(
+                f"Model '{model}' is not a local Ollama model (must end in '-cosc'). "
+                "Cloud/API-key-based models are no longer supported."
+            )
 
 
     # --------------------------------------
@@ -149,13 +127,6 @@ class DocstringClassifier:
         signal.alarm(TIMEOUT)
 
         try:
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://csse.canterbury.ac.nz",
-                "X-Title": "Docstring Validator",
-            }
-
             data = {
                 "model": MODELS[self.model],
                 "temperature": 0.0,
@@ -163,21 +134,16 @@ class DocstringClassifier:
                 "max_tokens": 100,
                 "messages": [
                     {
-                        "role": "system",
-                        "content": f"{system_prompt}",
-                    },
-                    {
                         "role": "user",
-                        "content": f"{code}",
+                        "content": f"{system_prompt}\n{code}",
                     }
                 ],
-                "provider": {"zdr": True},
             }
 
             request = urllib.request.Request(
                 url=f"{self.base_url}/chat/completions",
                 data=json.dumps(data).encode(),
-                headers=headers,
+                headers={"Content-Type": "application/json"},
                 method='POST'
             )
 
@@ -198,7 +164,7 @@ class DocstringClassifier:
             # Catch timeout-like cases robustly
             if "timed out" in str(e).lower() or "timeout" in str(e).lower():
                 return "VALID - but not LLM checked (timed out)"
-            return f"VALID - but not LLM checked (the request raised a URLError '{e}')"
+            return f"VALID - but not LLM checked (the request raised an exception '{e}')"
 
         except Exception as e:
             if "timed out" in str(e).lower():
@@ -247,7 +213,7 @@ def get_filename():
         print(error_message)
         filename = input(prompt)
     return filename
-    
+
 # Read data from file into a list
 def file_to_list(filename):
     """ """
@@ -265,19 +231,19 @@ def data_to_litres(data_in_gallons):
         value_in_litres = value_in_gallons * LITRES_PER_GALLON
         data_in_litres.append(value_in_litres)
     return data_in_litres
-    
+
 # Calculate average
 def average_calc(data_in_litres):
     """ """
     average = sum(data_in_litres) / len(data_in_litres)
     return average
-    
+
 # Print some statistics about the data
 def print_statistics(data_in_litres, average):
     """ """
     print(f"Average volume: {average:.2f}")
     print(f"Minimum volume: {min(data_in_litres):.2f}")
-    print(f"Maximum volume: {max(data_in_litres):.2f}")  
+    print(f"Maximum volume: {max(data_in_litres):.2f}")
 
 def main():
     """ """

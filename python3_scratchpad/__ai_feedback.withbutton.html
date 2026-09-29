@@ -1,0 +1,121 @@
+<div class="coderunner-test-results good">
+    <a class="btn btn-link coderunner-ai-feedback-link" style="background-color:#CFC">Get AI feedback</a>
+</div>
+<div class="coderunner-ai-feedback collapse" expanded="false" style="margin-bottom:8px">
+    <div class="coderunner-ai-feedback-content" style="white-space: pre-wrap; padding: 8px; background-color: #fff; border: 1px solid #ddd; border-radius: 4px;"></div>
+</div>
+<input type="hidden" class="coderunner-ai-prompt-text" value="%s">
+<script>
+    // Purpose key identifying this AI use case to local_aigateway, which
+    // routes it to whichever provider this site's admin has configured
+    // for it (see provider_router.php) - not used for consent here, since
+    // clicking "Get AI feedback" is itself the informed consent.
+    window.CODERUNNER_AI_FEEDBACK_PURPOSE = window.CODERUNNER_AI_FEEDBACK_PURPOSE || 'python3_scratchpad_feedback';
+
+    if (window.escapeHtml === undefined) {
+        window.escapeHtml = function (text) {
+            var map = {
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;', "\n": '<br>'
+            };
+            return text.replace(/[&<>"'\n]/g, function (m) { return map[m]; });
+        };
+    }
+
+    // template.py base64-encodes the prompt text (see get_ai_feedback_button_html)
+    // rather than html-escaping it, since Moodle's text filters (e.g. Emoticons)
+    // do naive substring substitution over rendered epiloguehtml with no regard
+    // for HTML structure and can mangle free-form English text mid-attribute.
+    if (window.coderunnerBase64ToUtf8 === undefined) {
+        window.coderunnerBase64ToUtf8 = function (b64) {
+            var bytes = Uint8Array.from(window.atob(b64), function (c) { return c.charCodeAt(0); });
+            return new TextDecoder('utf-8').decode(bytes);
+        };
+    }
+
+    // Reveal feedbackDiv with the given (already html-safe) content, and flip
+    // the link to its "hide" state. loaded=true only for a genuine successful
+    // fetch - an error result is deliberately NOT marked as loaded, so the
+    // next click retries rather than just re-showing the same stale error.
+    window.coderunner_ai_feedback_reveal = window.coderunner_ai_feedback_reveal || function (html, feedbackLink, feedbackDiv, feedbackContent, loaded) {
+        feedbackContent.innerHTML = html;
+        feedbackDiv.style.display = 'block';
+        feedbackDiv.setAttribute('expanded', 'true');
+        feedbackDiv.setAttribute('data-loaded', loaded ? 'true' : 'false');
+        feedbackLink.innerHTML = 'Hide AI feedback';
+    };
+
+    // Call local_aigateway_generate_text and reveal the result (or an error message).
+    // Clicking "Get AI feedback" is itself the informed consent - no separate
+    // consent check or recording here.
+    window.coderunner_ai_feedback_fetch = window.coderunner_ai_feedback_fetch || function (ajax, contextid, promptText, feedbackLink, feedbackDiv, feedbackContent) {
+        feedbackLink.innerHTML = 'Loading...';
+        ajax.call([{
+            methodname: 'local_aigateway_generate_text',
+            args: {contextid: contextid, purpose: window.CODERUNNER_AI_FEEDBACK_PURPOSE, prompttext: promptText},
+            done: function (response) {
+                if (response.success) {
+                    window.coderunner_ai_feedback_reveal(window.escapeHtml(response.generatedcontent), feedbackLink, feedbackDiv, feedbackContent, true);
+                } else {
+                    window.coderunner_ai_feedback_reveal(
+                        'Sorry, AI feedback is unavailable (' + window.escapeHtml(response.errormessage) + ').',
+                        feedbackLink, feedbackDiv, feedbackContent, false
+                    );
+                }
+            },
+            fail: function (err) {
+                window.coderunner_ai_feedback_reveal(
+                    'Sorry, AI feedback is unavailable (' + window.escapeHtml(err.message) + ').',
+                    feedbackLink, feedbackDiv, feedbackContent, false
+                );
+            }
+        }]);
+    };
+
+    // Main click handler. States, driven by the expanded/data-loaded attributes:
+    //  - never fetched, or last fetch errored: clicking the button (labelled
+    //    "Get AI feedback") is itself the informed consent - just fetch.
+    //  - successfully fetched, currently shown/hidden: pure local visibility
+    //    toggle of already-fetched content, no new request, hence "Show"/"Hide"
+    //    rather than "Get".
+    window.coderunner_ai_feedback_link_clicked = window.coderunner_ai_feedback_link_clicked || function (src) {
+        var question = src.target.closest('div.specificfeedback');
+        var feedbackDiv = question.getElementsByClassName('coderunner-ai-feedback')[0];
+        var feedbackContent = question.getElementsByClassName('coderunner-ai-feedback-content')[0];
+        var feedbackLink = question.getElementsByClassName('coderunner-ai-feedback-link')[0];
+        var promptText = window.coderunnerBase64ToUtf8(question.getElementsByClassName('coderunner-ai-prompt-text')[0].value);
+        var loaded = feedbackDiv.getAttribute('data-loaded') === 'true';
+
+        if (feedbackDiv.classList.contains('collapsing')) {
+            return;
+        }
+
+        if (feedbackDiv.getAttribute('expanded') === 'true') {
+            feedbackLink.innerHTML = loaded ? 'Show AI feedback' : 'Get AI feedback';
+            feedbackDiv.style.display = 'none';
+            feedbackDiv.setAttribute('expanded', 'false');
+            return;
+        }
+
+        if (loaded) {
+            feedbackLink.innerHTML = 'Hide AI feedback';
+            feedbackDiv.style.display = 'block';
+            feedbackDiv.setAttribute('expanded', 'true');
+            return;
+        }
+
+        require(['core/ajax'], function (ajax) {
+            var contextid = M.cfg.contextid;
+            window.coderunner_ai_feedback_fetch(ajax, contextid, promptText, feedbackLink, feedbackDiv, feedbackContent);
+        });
+    };
+
+    var coderunner_ai_feedback_links = document.getElementsByClassName('coderunner-ai-feedback-link');
+
+    for (var i = 0; i < coderunner_ai_feedback_links.length; i++) {
+        var el = coderunner_ai_feedback_links[i];
+        if (!el.classList.contains('has-ai-click-handler')) {
+            el.addEventListener('click', window.coderunner_ai_feedback_link_clicked);
+            el.classList.add('has-ai-click-handler');
+        }
+    }
+</script>

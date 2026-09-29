@@ -1,4 +1,4 @@
-""" Probably last updated on 10 Sep 2024. """
+""" Probably last updated on 10 Sep 2024. """ 
 import html
 import locale
 import json
@@ -11,7 +11,7 @@ from pytester import PyTester
 
 locale.setlocale(locale.LC_ALL, 'C.UTF-8')
 
-# NOTE: the following are most of the parameters from the python3_stage1
+# NOTE: the following are most of the parameters from the python3_scratchpad
 # question type, included here so that the standard python3_stage1 support
 # files can be used without changed. However, only the ones prefixed by
 # '*' can be used in this question type (without the asterisk).
@@ -37,7 +37,7 @@ KNOWN_PARAMS = {
     'nostylechecks': True,
     'notest': False,
     '*parsegaps': False,
-    'precheckers': ['pylint'],
+    'precheckers': ['ruff'],
     '*prelude': '',
     '*proscribedbuiltins': ['exec', 'eval'],
     'proscribedfunctions': [],
@@ -72,6 +72,8 @@ KNOWN_PARAMS = {
             'disallow': ['_.*']
         },
     },
+    '*resultcolumns': [], # If empty, use QUESTION.resultcolumns. See below.
+    'ruffoptions': [],
     'runextra': False,
     '*showfeedbackwhenright': False,
     'stdinfromextra': False,
@@ -143,7 +145,16 @@ def process_template_params():
     if PARAMS['runextra']:
         PARAMS['extra'] = 'pretest'  # Legacy support
     if PARAMS['timeout'] < 2:
-        PARAMS['timeout'] = 2  # Allow 1 extra second freeboard 
+        PARAMS['timeout'] = 2  # Allow 1 extra second freeboard
+        
+    # We use the template parameter for resultcolumns if non-empty.
+    # Otherwise the value from the question, or an equivalent default if that's empty too.
+    q_result_columns = """{{QUESTION.resultcolumns}}""".strip();
+    if PARAMS['resultcolumns'] == []:
+        if q_result_columns:
+            PARAMS['resultcolumns'] = json.loads(q_result_columns);
+        else:
+            PARAMS['resultcolumns'] = [['Test', 'testcode'], ['Input', 'stdin'], ['Expected', 'expected'], ['Got', 'got']]
 
 
 def update_test_cases(test_cases, outcome):
@@ -199,13 +210,13 @@ def get_test_cases(ui_source, field_values):
     
     for test in tests:
         # If gaps come from test cases then we fill student answer into gaps.
-        
         if ui_source == 'test0' and test['testcode'].strip() != '':
             test_code_html = insert_fields(htmlize(test['testcode']), field_values, highlight=True)
             test['testcode'] = insert_fields(test['testcode'], field_values)
             test_case = TestCase(test, test_code_html=test_code_html)
         else:
-            test_case = TestCase(test)
+            test_code_html = htmlize(test['testcode'])
+            test_case = TestCase(test, test_code_html=test_code_html)
         test_cases.append(test_case)
     return test_cases
     
@@ -226,7 +237,7 @@ def insert_fields(code, fields, splitter=r"\{\[.*?\]\}", highlight=False):
     for value in fields:
         if len(value.splitlines()) > 1:
             # Indent all lines in a textarea by the indent of the first line
-            indent = len(prog.splitlines()[-1])
+            indent = len(prog) - prog.rfind('\n') - 1
             value_bits = value.splitlines()
             for j in range(1, len(value_bits)):
                 value_bits[j] = indent * ' ' + value_bits[j]
@@ -320,6 +331,7 @@ def process_global_params(ui_source, field_values):
     PARAMS['QUESTION_PRECHECK'] = {{ QUESTION.precheck }} # Type of precheck: 0 = None, 1 = Empty etc
     PARAMS['ALL_OR_NOTHING'] = "{{ QUESTION.allornothing }}" == "1" # Whether or not all-or-nothing grading is being used
     PARAMS['GLOBAL_EXTRA'] = """{{ QUESTION.globalextra | e('py') }}\n"""
+    PARAMS['STEP_INFO'] = json.loads("""{{ QUESTION.stepinfo | json_encode }}""")
     answer = get_answer()
     PARAMS['AUTHOR_ANSWER'] = ''
     if answer:
@@ -337,7 +349,6 @@ else:
 process_template_params()
 
 field_values = get_student_answer_fields()
-answer_field_values = json.loads(""" {{ QUESTION.answer | e('py') }}""")
 test_cases = get_test_cases(ui_source, field_values)
 
 process_global_params(ui_source, field_values)
@@ -358,6 +369,7 @@ else:
     PARAMS['nostylechecks'] = True
     PARAMS['stylechecks'] = False  # For the future!
     if PARAMS['useanswerfortests']:
+        answer_field_values = json.loads(""" {{ QUESTION.answer | e('py') }}""")
         outcome, test_cases = get_expecteds_from_answer(PARAMS, test_cases, ui_source, answer_field_values)
     
     if test_cases:

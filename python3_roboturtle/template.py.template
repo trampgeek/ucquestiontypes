@@ -68,9 +68,11 @@ def run_tests(testcases: List[Dict[str, Any]], student_code: str, disabled_funct
             # Execute the student's code
             try:
                 exec(student_code, namespace)
+                # Check if goal is satisfied (fail message will be empty)
+                errors = _current_world.fail_message().strip()
             except SyntaxError as e:
-                return f"Syntax error in your code at line {e.lineno}: {e.msg}"
-            except RuntimeError as e:
+                errors = f"Syntax error in your code at line {e.lineno}: {e.msg}"
+            except Exception as e:
                 # Extract line number from traceback
                 tb = traceback.extract_tb(sys.exc_info()[2])
                 # Find the last frame that's in the student's code (not in this module)
@@ -78,29 +80,14 @@ def run_tests(testcases: List[Dict[str, Any]], student_code: str, disabled_funct
                 for frame in tb:
                     if frame.filename == "<string>":
                         student_frame = frame
-                
-                error_msg = str(e)
-                if student_frame:
-                    return f"Error at line {student_frame.lineno}: {error_msg}"
-                else:
-                    return f"Error: {error_msg}"
-            except Exception as e:
-                # Extract line number from traceback
-                tb = traceback.extract_tb(sys.exc_info()[2])
-                student_frame = None
-                for frame in tb:
-                    if frame.filename == "<string>":
-                        student_frame = frame
-                
+
                 error_type = type(e).__name__
                 error_msg = str(e)
                 if student_frame:
-                    return f"{error_type} at line {student_frame.lineno}: {error_msg}"
+                    errors = f"{error_type} at line {student_frame.lineno}: {error_msg}"
                 else:
-                    return f"{error_type}: {error_msg}"
-            
-            # Check if goal is satisfied (fail message will be empty)
-            errors = _current_world.fail_message().strip()
+                    errors = f"{error_type}: {error_msg}"
+
             if errors:
                 return f"Test {i+1} failed as follows:\n{errors}"
         
