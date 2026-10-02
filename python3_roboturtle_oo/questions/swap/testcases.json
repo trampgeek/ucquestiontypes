@@ -1,0 +1,64 @@
+{
+  "testcases": [
+    {
+      "world_class": "TargetWorld",
+      "world_params": {
+        "targets": [{"robot": "Alice", "location": [6, 0]}, {"robot": "Bob", "location": [0, 0]}],
+        "target_icon": "house_outline",
+        "target_labels": false
+      },
+      "grid_size": [7, 2],
+      "robots": [
+        {"name": "Alice", "position": [0, 0], "heading": "east", "colour": "blue"},
+        {"name": "Bob", "position": [6, 0], "heading": "west", "colour": "red"}
+      ],
+      "blocked_cells": [[[0, 1], [2, 1]], [[4, 1], [6, 1]]],
+      "items": []
+    },
+    {
+      "world_class": "TargetWorld",
+      "world_params": {
+        "targets": [{"robot": "Alice", "location": [4, 0]}, {"robot": "Bob", "location": [0, 0]}],
+        "target_icon": "house_outline",
+        "target_labels": false
+      },
+      "grid_size": [5, 2],
+      "robots": [
+        {"name": "Alice", "position": [0, 0], "heading": "east", "colour": "blue"},
+        {"name": "Bob", "position": [4, 0], "heading": "west", "colour": "red"}
+      ],
+      "blocked_cells": [[[0, 1], [0, 1]], [[2, 1], [4, 1]]],
+      "items": []
+    },
+    {
+      "world_class": "TargetWorld",
+      "world_params": {
+        "targets": [{"robot": "Alice", "location": [8, 0]}, {"robot": "Bob", "location": [0, 0]}],
+        "target_icon": "house_outline",
+        "target_labels": false
+      },
+      "grid_size": [9, 2],
+      "robots": [
+        {"name": "Alice", "position": [0, 0], "heading": "east", "colour": "blue"},
+        {"name": "Bob", "position": [8, 0], "heading": "west", "colour": "red"}
+      ],
+      "blocked_cells": [[[0, 1], [5, 1]], [[7, 1], [8, 1]]],
+      "items": []
+    },
+    {
+      "world_class": "TargetWorld",
+      "world_params": {
+        "targets": [{"robot": "Alice", "location": [5, 0]}, {"robot": "Bob", "location": [0, 0]}],
+        "target_icon": "house_outline",
+        "target_labels": false
+      },
+      "grid_size": [6, 2],
+      "robots": [
+        {"name": "Alice", "position": [0, 0], "heading": "east", "colour": "blue"},
+        {"name": "Bob", "position": [5, 0], "heading": "west", "colour": "red"}
+      ],
+      "blocked_cells": [[[0, 1], [3, 1]], [[5, 1], [5, 1]]],
+      "items": []
+    }
+  ]
+}

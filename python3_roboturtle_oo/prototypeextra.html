@@ -68,12 +68,12 @@ class Item:
         drawer.write(self.symbol, align="center", font=("Arial", int(cell_size * 0.45), "normal"))
 
 # ============================================================================
-# RoboTurtle - The visual representation of the robot
+# TurtleSprite - The on-screen turtle (with inventory) used by each RoboTurtle
 # ============================================================================
 
 
-class RoboTurtle(Turtle):
-    """A turtle subclass representing the robot with inventory."""
+class TurtleSprite(Turtle):
+    """A turtle subclass that carries an item inventory."""
     
     def __init__(self):
         super().__init__()
@@ -112,6 +112,9 @@ from collections import defaultdict
 
 DEFAULT_CELL_SIZE = 65
 FILL_COLOUR = "#4CBB17"
+OUTLINE_HOUSE = "house_outline"  # A target_icon / label name: a faint line-drawn house.
+OUTLINE_COLOUR = "#c4c4c4"
+HEADING_ANGLES = {"north": 90, "east": 0, "south": 270, "west": 180}
 TEXT_BAR_HEIGHT = 40           # Height, in pixels, of the optional text output bar.
 TEXT_LABEL_WIDTH = 70          # Width of the shaded "Text:" label cell.
 TEXT_LABEL_COLOUR = "#c9d6e3"
@@ -142,12 +145,11 @@ class World:
         self.wall_segments = set()  # Set of unit wall segments for O(1) lookup
         self.blocked_cells = []
         self.items = defaultdict(list)  # position (tuple) -> list of items
-        self.robot = None
-        self.robot_position = (0, 0)
-        self.robot_heading: str = "north"  # north, east, south, west
+        self.robots = []        # The RoboTurtle instances created so far by the student's code.
+        self.robot_specs = []   # Start specs (position, heading, colour, inventory), one per robot.
+        self.speed_setting = 3  # Mid-range speed. User can change if they like.
         self.fail_messages = []  # A list of errors in the final state. Empty if goal satisfied.
         self.world_params = world_params
-        self.path = [] # A list of the cells that the turtle moves into.
         self.labelled_cells = [] # A list of [location, utf8_char] pairs of labelled cells.
         if world_params and 'labelled_cells' in world_params:
             self.labelled_cells = world_params['labelled_cells']
@@ -262,12 +264,37 @@ class World:
             for location, char_name in self.labelled_cells:
                 if location_of_interest is None or location_of_interest == location:
                     centre_x, centre_y = self.cell_centre(location)
+                    if char_name == OUTLINE_HOUSE:
+                        self.draw_house_outline(drawer, centre_x, centre_y)
+                        continue
                     drawer.goto(centre_x, centre_y - self.cell_size * 0.2)
                     icon = Item.ITEM_TYPES.get(char_name, 'box')
                     drawer.write(icon, align="center", font=("Arial", int(self.cell_size * 0.5), "normal"))
     
-    def draw_grid(self):
-        """Draw the grid, walls, items, and labels."""
+    def draw_house_outline(self, drawer, cx, cy):
+        """Draw a faint grey outline of a house (roof, walls and door) centred on
+           (cx, cy) - unobtrusive enough for a turtle to sit on top of it.
+        """
+        s = self.cell_size
+        drawer.color(OUTLINE_COLOUR)
+        drawer.pensize(2)
+        # Walls and roof as one continuous outline, then the door.
+        outline = [(-0.28, -0.30), (-0.28, 0.08), (-0.36, 0.08), (0, 0.38),
+                   (0.36, 0.08), (0.28, 0.08), (0.28, -0.30), (-0.28, -0.30)]
+        door = [(-0.07, -0.30), (-0.07, -0.08), (0.07, -0.08), (0.07, -0.30)]
+        for points in (outline, door):
+            drawer.penup()
+            drawer.goto(cx + points[0][0] * s, cy + points[0][1] * s)
+            drawer.pendown()
+            for dx, dy in points[1:]:
+                drawer.goto(cx + dx * s, cy + dy * s)
+            drawer.penup()
+
+    def draw_grid(self, restore_tracer=True):
+        """Draw the grid, walls, items, and labels. Animation (tracer) is switched
+           back on at the end unless restore_tracer is False, in which case the caller
+           must do it - used by the loader so the robots are drawn before animation starts.
+        """
         drawer = Turtle()
         drawer.hideturtle()
         drawer.speed(0)
@@ -341,10 +368,12 @@ class World:
                 # If multiple items, draw count
                 self.write_item_count(item_list, centre_x, centre_y, drawer)
         
+        self.draw_robot_names()
         self.screen.update()
 
         # Re-enable animation after initial grid drawing
-        self.screen.tracer(1)
+        if restore_tracer:
+            self.screen.tracer(1)
 
         if self.text_output_enabled:
             self.draw_text_bar()
@@ -425,30 +454,135 @@ class World:
         self.draw_text_bar()
 
 
-    def create_robot(self, position, heading: str = "north"):
-        """Create and position the robot."""
-        self.robot = RoboTurtle()
-        self.robot.hideturtle()  # Hide initially to avoid showing movement to start position
-        self.robot.speed(0)  # Need to race to the start point
-        self.robot_position = tuple(position)
-        self.robot_heading = heading
-        
-        # Position the robot at the center of the cell
-        screen_x, screen_y = self.cell_centre(position)
-        
-        self.robot.penup()
-        self.robot.goto(screen_x, screen_y)
-        
-        # Set heading
-        heading_angles = {"north": 90, "east": 0, "south": 270, "west": 180}
-        self.robot.setheading(heading_angles[heading])
-        
-        # Now show the turtle at the correct position
-        self.robot.showturtle()
-        self.robot.speed(3)   # Mid-range speed. User can change if they like.
-        
+    def create_sprites(self):
+        """Create and show a turtle for every robot spec, at its start cell, so
+           the student can see the initial state. Called after the grid is drawn.
+        """
+        for spec in self.robot_specs:
+            spec["robot"] = None  # Set to the RoboTurtle once the student creates it.
+            spec["sprite"] = self.create_turtle(tuple(spec["position"]),
+                                                spec.get("heading", "north"), spec["colour"])
+            for item in spec.get("inventory", []):
+                spec["sprite"].add_item_to_inventory(item)
+
+    def claim_robot_spec(self, name):
+        """Return the (unclaimed) spec of the robot with the given name, marking it
+           as claimed by the RoboTurtle being constructed.
+        """
+        names = [spec["name"] for spec in self.robot_specs]
+        if name is None:
+            if len(names) != 1 or self.robot_specs[0]["named"]:
+                raise RuntimeError("You must say which robot you want: "
+                                   f"RoboTurtle(name) with name one of {names}")
+            name = names[0]
+        if name not in names:
+            raise RuntimeError(f"There is no robot called {name!r} in this world. "
+                               f"The robots are: {names}")
+        spec = self.robot_specs[names.index(name)]
+        if spec["robot"] is not None:
+            raise RuntimeError(f"A RoboTurtle called {name!r} has already been created.")
+        return spec
+
+    def create_turtle(self, position, heading, colour):
+        """Create and position a TurtleSprite and return it."""
+        turtle = TurtleSprite()
+        turtle.hideturtle()  # Hide initially to avoid showing movement to start position
+        turtle.speed(0)  # Need to race to the start point
+        turtle.color(colour)
+        turtle.penup()
+        turtle.goto(*self.cell_centre(position))
+        turtle.setheading(HEADING_ANGLES[heading])
+        turtle.showturtle()
+        turtle.speed(self.speed_setting)
         self.screen.update()
-    
+        return turtle
+
+    def draw_robot_names(self):
+        """Label each robot's start cell with the robot's name, if there are several
+           robots or the world explicitly names them.
+        """
+        if not self.names_shown():
+            return
+        drawer = Turtle()
+        drawer.hideturtle()
+        drawer.speed(0)
+        drawer.penup()
+        shared = self.labelled_target_cells()
+        for spec in self.robot_specs:
+            cell = tuple(spec["position"])
+            x, y = self.cell_centre(cell)
+            if cell in shared:
+                # The cell also has a target label in its bottom right corner, so go bottom left.
+                drawer.goto(x - self.cell_size * 0.5 + 3, y - self.cell_size * 0.40)
+                align = "left"
+            else:
+                drawer.goto(x, y - self.cell_size * 0.40)
+                align = "center"
+            drawer.color(spec["colour"])
+            drawer.write(spec["name"], align=align, font=("Arial", 10, "bold"))
+
+    def labelled_target_cells(self):
+        """The set of cells that get a target-name label. Overridden by TargetWorld."""
+        return set()
+
+    def names_shown(self):
+        """True if robot (and target) name labels should be drawn."""
+        return len(self.robot_specs) > 1 or any(spec["named"] for spec in self.robot_specs)
+
+    def spec_for(self, name, index):
+        """Return the robot spec with the given name or, if name is None, the index'th spec
+           (used to infer which robot a per-robot goal belongs to from its order).
+        """
+        if name is None:
+            if index >= len(self.robot_specs):
+                raise ValueError(f"World has a goal for robot number {index + 1} but only "
+                                 f"{len(self.robot_specs)} robot(s)")
+            return self.robot_specs[index]
+        for spec in self.robot_specs:
+            if spec["name"] == name:
+                return spec
+        raise ValueError(f"World has a goal for unknown robot {name!r}")
+
+    def set_speed(self, n):
+        """Set the speed of all current and future robots."""
+        self.speed_setting = n
+        # Changing speed with animation on can make Skulpt drop a turtle from the
+        # display, so do it with animation off and then switch animation back on.
+        self.screen.tracer(0)
+        for spec in self.robot_specs:
+            if "sprite" in spec:
+                spec["sprite"].speed(n)
+        self.screen.update()
+        self.screen.tracer(1)
+
+    def other_robot_at(self, cell, me):
+        """Return a robot other than 'me' at the given cell, or None."""
+        for robot in self.robots:
+            if robot is not me and robot.cell == cell:
+                return robot
+        return None
+
+    def note_cell_erased(self):
+        """Item display updates wipe path segments, so every robot must redraw its last few."""
+        for robot in self.robots:
+            robot.redraw_last = True
+
+    def redraw_world(self):
+        """Redraw grid and walls and then restore all the robots."""
+        self.screen.tracer(0)  # Disable animation for redraw
+        self.screen.clear()
+        self.draw_grid()
+        for spec in self.robot_specs:
+            robot = spec["robot"]
+            cell = robot.cell if robot else tuple(spec["position"])
+            heading = robot.heading if robot else spec.get("heading", "north")
+            spec["sprite"].showturtle()
+            spec["sprite"].penup()
+            spec["sprite"].goto(*self.cell_centre(cell))
+            spec["sprite"].setheading(HEADING_ANGLES[heading])
+        self.screen.update()
+        self.screen.tracer(1)  # Re-enable animation
+
     def update_item_display(self, position, redraw_path_segment=True):
         """Update the display of items at a specific position without redrawing the world."""
         centre_x, centre_y = self.cell_centre(position)
@@ -491,12 +625,6 @@ class World:
                         font=("Arial", 10, "normal"))
         
      
-    def bot_controller(self) -> 'BotController':
-        """Return a controller for commanding the robot."""
-        if self.robot is None:
-            raise RuntimeError("Robot has not been created. Call create_robot() first.")
-        return BotController(self)
-    
     def is_wall_between(self, pos1, pos2) -> bool:
         """Check if there's a wall between two adjacent positions."""
         x1, y1 = pos1
@@ -522,6 +650,9 @@ class World:
            so the text-output check below still runs.
         """
         self.fail_messages = []
+        missing = [spec["name"] for spec in self.robot_specs if spec["robot"] is None]
+        if missing:
+            self.fail_messages.append(f"Your code never created a RoboTurtle for: {missing}")
         if self.text_output_enabled and self.sent_texts != self.expected_texts:
             if len(self.expected_texts) == 1:
                 if len(self.sent_texts) > 1:
@@ -561,23 +692,68 @@ class TargetWorld(World):
         """Need to register our subclasses, so pass the subclass registration up to our parent."""
         super().__init_subclass__(**kwargs)
     
+    target_required = True  # Subclasses may set False to make targets optional.
+
     def __init__(self, grid_size, world_params):
         super().__init__(grid_size, world_params)
-        if 'target' not in world_params:
+        has_target = 'target' in world_params or 'targets' in world_params
+        if not has_target and self.target_required:
             raise ValueError("TargetWorld requires 'target' in world_params")
-        self.target = tuple(world_params['target'])
+        # 'targets' (one per robot, matched by index) is optional; 'target' is robot 0's.
+        # 'targets' is a list with one entry per robot. Each is either a cell, [x, y]
+        # (the robot is inferred from the entry's position in the list), or
+        # {"robot": name, "location": [x, y]}. 'target' is a single target for robot 0.
+        if 'targets' in world_params:
+            raw_targets = world_params['targets']
+        else:
+            raw_targets = [world_params['target']] if has_target else []
+        self.target_entries = []  # (robot name or None, cell) pairs
+        for entry in raw_targets:
+            if isinstance(entry, dict):
+                self.target_entries.append((entry['robot'], tuple(entry['location'])))
+            else:
+                self.target_entries.append((None, tuple(entry)))
+        self.target = self.target_entries[0][1] if self.target_entries else None
+        self.label_targets = world_params.get('target_labels', True)  # Name each target's robot?
         target_icon = world_params.get('target_icon', 'flag')
-        self.labelled_cells.append((self.target, target_icon))
+        for _, cell in self.target_entries:
+            self.labelled_cells.append((cell, target_icon))
+
+    def labelled_target_cells(self):
+        """Cells that get a "→name" label (when names are shown)."""
+        if not self.label_targets:
+            return set()
+        return {cell for _, cell in self.target_entries}
+
+    def draw_robot_names(self):
+        """Extend parent to also label each target with the name of its robot."""
+        super().draw_robot_names()
+        if not self.names_shown() or not self.label_targets:
+            return
+        drawer = Turtle()
+        drawer.hideturtle()
+        drawer.speed(0)
+        drawer.penup()
+        for i, (name, cell) in enumerate(self.target_entries):
+            spec = self.spec_for(name, i)
+            x, y = self.cell_centre(cell)
+            drawer.goto(x + self.cell_size * 0.5 - 3, y - self.cell_size * 0.40)  # Bottom right corner
+            drawer.color(spec["colour"])
+            drawer.write("→" + spec["name"], align="right", font=("Arial", 10, "bold"))
     
     def check_final_state(self):
         """Check if the robot has reached the target position. If not,
            set self.fail_messages to an explanatory comment.
         """
         super().check_final_state()
-        if self.robot_position != self.target:
-            self.fail_messages.append(f"Robot did not reach the target. "
-                f"Expected position: {self.target}, "
-                f"Actual position: {self.robot_position}")
+        for i, (name, target) in enumerate(self.target_entries):
+            spec = self.spec_for(name, i)
+            robot = spec["robot"]
+            if robot is not None and robot.cell != target:
+                who = f"Robot {spec['name']!r}" if len(self.robot_specs) > 1 else "Robot"
+                self.fail_messages.append(f"{who} did not reach the target. "
+                    f"Expected position: {target}, "
+                    f"Actual position: {robot.cell}")
         return None
     
     def update_item_display(self, position, redraw_path_segment=True):
@@ -594,6 +770,8 @@ DEFAULT_DUMP_ICON = "trash"
 ANY_TYPE = "Any"
 
 class PickUpItemsWorld(TargetWorld):
+
+    target_required = False  # Targets are optional - the item dumps define the goal.
 
     def __init__(self, grid_size, world_params):
         super().__init__(grid_size, world_params)
@@ -639,12 +817,14 @@ class PickUpItemsWorld(TargetWorld):
 
     def _count_matching_items(self, item_type):
         """Count all items of the given type (or all items, if item_type is
-           ANY_TYPE) currently placed anywhere in the world.
+           ANY_TYPE) currently placed anywhere in the world or in the starting
+           inventory of any robot.
         """
+        in_world = [item for item_list in self.items.values() for item in item_list]
+        carried = [item for spec in self.robot_specs for item in spec.get("inventory", [])]
         return sum(
             1
-            for item_list in self.items.values()
-            for item in item_list
+            for item in in_world + carried
             if item_type == ANY_TYPE or item.item_type == item_type
         )
 
@@ -691,362 +871,263 @@ class PathWorld(World):
     """
     def __init__(self, grid_size, world_params):
         super().__init__(grid_size, world_params)
-        path_segments = world_params['path']
+        # 'paths' is a list of path specs, one per robot; 'path' is robot 0's only.
+        # Each entry is either a list of segments (robot inferred from its position in
+        # the list) or {"robot": name, "path": segments}.
+        if 'paths' in world_params:
+            path_specs = world_params['paths']
+        elif 'path' in world_params:
+            path_specs = [world_params['path']]
+        else:
+            raise ValueError("PathWorld requires 'path' (or 'paths') inside world_params")
+        self.required_paths = []  # (robot name or None, cells) pairs
+        for entry in path_specs:
+            if isinstance(entry, dict):
+                if 'robot' not in entry or 'path' not in entry:
+                    raise ValueError("Each dict entry in 'paths' needs both 'robot' and 'path' keys")
+                self.required_paths.append((entry['robot'], self.expand_path(entry['path'])))
+            else:
+                self.required_paths.append((None, self.expand_path(entry)))
+        self.required_path = self.required_paths[0][1]
 
-        # Expand the list of path segments into a list of cell locations
-        self.required_path = []
+    def expand_path(self, path_segments):
+        """Expand a list of [start, end] segments into a list of cell locations."""
+        cells = []
         for start, end in path_segments:
             x0, y0 = start
             x1, y1 = end
             if x0 != x1 and y0 != y1:
                 raise RuntimeError("Path segments must be horizontal or vertical")
-            if x0 == x1:  # Vertical
-                dy = 1 if y0 <= y1 else -1
-                y = y0
-                for i in range(abs(y1 - y0) + 1):
-                    self.add_path_cell((x0, y))
-                    y += dy
-                    i += 1
-            else:  # Horizontal
-                dx = 1 if x0 <= x1 else -1
-                x = x0
-                for i in range(abs(x1 - x0) + 1):
-                    self.add_path_cell((x, y0))
-                    x += dx
-                    i += 1
-
-    def add_path_cell(self, cell):
-        """Add the given cell to the path unless it's already the last
-           cell (to handle the case of a new segment starting where the
-           last one finished).
-        """
-        if not (self.required_path and self.required_path[-1] == cell):
-            self.required_path.append(cell)
+            dx = (x1 > x0) - (x1 < x0)
+            dy = (y1 > y0) - (y1 < y0)
+            for i in range(abs(x1 - x0) + abs(y1 - y0) + 1):
+                cell = (x0 + i * dx, y0 + i * dy)
+                # Skip if a new segment starts where the last one finished.
+                if not (cells and cells[-1] == cell):
+                    cells.append(cell)
+        return cells
 
     def check_final_state(self):
         """Set self.fail_messages to a list of all faults in the final state
         """
         super().check_final_state()
-        if self.required_path != self.path:
-            self.fail_messages.append("Roboturtle has not followed the required path")
+        for i, (name, required) in enumerate(self.required_paths):
+            spec = self.spec_for(name, i)
+            robot = spec["robot"]
+            if robot is not None and robot.path != required:
+                who = f"Robot {spec['name']!r}" if len(self.robot_specs) > 1 else "Roboturtle"
+                self.fail_messages.append(f"{who} has not followed the required path")
 
 
 # ============================================================================
-# BotController - The command interface for students
+# RoboTurtle - the student-facing, object-oriented robot.
+# Each instance has its own turtle, position, heading, path and inventory.
 # ============================================================================
 
 
 
-class BotController:
-    """Controller interface for commanding the robot."""
-    
-    def __init__(self, world: World):
+HEADING_DELTAS = {"north": (0, 1), "east": (1, 0), "south": (0, -1), "west": (-1, 0)}
+LEFT_OF = {"north": "west", "west": "south", "south": "east", "east": "north"}
+RIGHT_OF = {"north": "east", "east": "south", "south": "west", "west": "north"}
+HEADING_ANGLES = {"north": 90, "east": 0, "south": 270, "west": 180}
+
+
+class RoboTurtle:
+    """A robot in the current world. The world shows each robot, labelled with
+       its name, at its starting position; RoboTurtle(name) takes control of
+       the robot with that name. The name may be omitted only if the world
+       has just one robot.
+    """
+
+    def __init__(self, name=None):
+        world = _current_world
+        if world is None:
+            raise RuntimeError("No world loaded.")
+        spec = world.claim_robot_spec(name)
         self.world = world
-        self.redraw_last = False # True to redraw path over previous cell.
-    
+        self.name = spec["name"]
+        self.cell = tuple(spec["position"])
+        self.heading = spec.get("heading", "north")
+        self.colour = spec["colour"]
+        self.path = [self.cell]
+        self.redraw_last = False  # True to redraw path over previous cell.
+        self.turtle = spec["sprite"]
+        spec["robot"] = self
+        world.robots.append(self)
+
+    # ---- geometry helpers (no state change) ----
+    def _cell_ahead(self):
+        dx, dy = HEADING_DELTAS[self.heading]
+        return (self.cell[0] + dx, self.cell[1] + dy)
+
+    def _cell_right(self):
+        dx, dy = HEADING_DELTAS[RIGHT_OF[self.heading]]
+        return (self.cell[0] + dx, self.cell[1] + dy)
+
+    def _in_grid(self, cell):
+        return 0 <= cell[0] < self.world.grid_width and 0 <= cell[1] < self.world.grid_height
+
+    # ---- commands ----
     def move(self):
         """Move the robot forward one cell in its current direction."""
-        # Calculate new position
-        x, y = self.world.robot_position
-        heading = self.world.robot_heading
-        
-        new_pos = {
-            "north": (x, y + 1),
-            "east": (x + 1, y),
-            "south": (x, y - 1),
-            "west": (x - 1, y)
-        }[heading]
-
-        # Check for walls (including perimeter)
-        if self.world.is_wall_between(self.world.robot_position, new_pos):
-            raise RuntimeError(f"Cannot move: wall blocks path from {self.world.robot_position} to {new_pos}")
-
-        # Check for blocked cells
+        new_pos = self._cell_ahead()
+        if self.world.is_wall_between(self.cell, new_pos):
+            raise RuntimeError(f"Cannot move: wall blocks path from {self.cell} to {new_pos}")
         if new_pos in self.world.blocked_cells:
             raise RuntimeError(f"Cannot move: cell {new_pos} is blocked")
+        if self.world.other_robot_at(new_pos, self) is not None:
+            raise RuntimeError(f"Cannot move: another robot is at {new_pos}")
 
-        # Move the robot
-        self.world.robot_position = new_pos
+        self.cell = new_pos
         screen_x, screen_y = self.world.cell_centre(new_pos)
-        self.world.robot.color('blue')
-        self.world.robot.pendown()
-        self.world.robot.goto(screen_x, screen_y)
-        self.world.robot.penup()
-        self.world.path.append(new_pos)
+        self.turtle.color(self.colour)
+        self.turtle.pendown()
+        self.turtle.goto(screen_x, screen_y)
+        self.turtle.penup()
+        self.path.append(new_pos)
 
         # Horrible hack to redraw the last 3 segments of the path in the event that
-        # it got obliterated by a previous cell erasure operation from picking up items. 
+        # it got obliterated by a previous cell erasure operation from picking up items.
         # It seems this can't be done while the live turtle is in the obliterated
         # cell.
         if self.redraw_last:
             worker = Turtle()
-            previous_cells = self.world.path[-3:]
+            previous_cells = self.path[-3:]
             worker.speed(0)
             worker.hideturtle()
-            worker.color('blue')
+            worker.color(self.colour)
             worker.penup()
             worker.goto(self.world.cell_centre(previous_cells[0]))
             worker.pendown()
             for cell in previous_cells[1:]:
                 worker.goto(self.world.cell_centre(cell))
             self.redraw_last = False
-    
+
     def turn_left(self):
         """Turn the robot 90 degrees to the left."""
-        transitions = {
-            "north": "west",
-            "west": "south",
-            "south": "east",
-            "east": "north"
-        }
-        self.world.robot_heading = transitions[self.world.robot_heading]
-        self.world.robot.left(90)
-    
+        self.heading = LEFT_OF[self.heading]
+        self.turtle.left(90)
+
     def turn_right(self):
         """Turn the robot 90 degrees to the right."""
-        transitions = {
-            "north": "east",
-            "east": "south",
-            "south": "west",
-            "west": "north"
-        }
-        self.world.robot_heading = transitions[self.world.robot_heading]
-        self.world.robot.right(90)
-    
+        self.heading = RIGHT_OF[self.heading]
+        self.turtle.right(90)
+
     def take(self) -> str:
         """Pick up an item from the current cell. Returns the item's type name."""
-        pos = self.world.robot_position
-
+        pos = self.cell
         if pos not in self.world.items or len(self.world.items[pos]) == 0:
             raise RuntimeError(f"Cannot take: no items at position {pos}")
-
-        # Remove one item from the cell
         item = self.world.items[pos].pop(0)
         if len(self.world.items[pos]) == 0:
             del self.world.items[pos]
-
-        # Add to robot inventory
-        self.world.robot.add_item_to_inventory(item)
-
-        # Update just the item display at this position
+        self.turtle.add_item_to_inventory(item)
         self.world.update_item_display(pos)
-        self.redraw_last = True
-
+        self.world.note_cell_erased()
         return item.item_type
-    
+
     def put(self) -> str:
         """Place an item from inventory into the current cell. Returns the item's type name."""
-        if not self.world.robot.has_item():
+        if not self.turtle.has_item():
             raise RuntimeError("Cannot put: robot has no items in inventory")
-
-        # Remove item from inventory (just take the first one)
-        item = self.world.robot.inventory.pop(0)
-
-        # Add to current cell
-        pos = self.world.robot_position
+        item = self.turtle.inventory.pop(0)
+        pos = self.cell
         if pos not in self.world.items:
             self.world.items[pos] = []
         self.world.items[pos].append(item)
-
-        # Update just the item display at this position
         self.world.update_item_display(pos)
-        self.redraw_last = True
-
+        self.world.note_cell_erased()
         return item.item_type
 
     def toss(self) -> str:
         """Toss an item from inventory into the cell directly in front of the robot.
            Returns the item's type name.
         """
-        if not self.world.robot.has_item():
+        if not self.turtle.has_item():
             raise RuntimeError("Cannot toss: robot has no items in inventory")
-
-        # Calculate the position in front of the robot
-        x, y = self.world.robot_position
-        heading = self.world.robot_heading
-
-        front_pos = {
-            "north": (x, y + 1),
-            "east": (x + 1, y),
-            "south": (x, y - 1),
-            "west": (x - 1, y)
-        }[heading]
-
-        # Check for tossing outside the grid.
-        x, y = front_pos
-        if x < 0 or x >= _current_world.grid_width or y < 0 or y >= _current_world.grid_height:
+        front_pos = self._cell_ahead()
+        if not self._in_grid(front_pos):
             raise RuntimeError("Cannot toss: out of bounds")
-
-        # Check for blocked cells
         if front_pos in self.world.blocked_cells:
             raise RuntimeError(f"Cannot toss: cell {front_pos} is blocked")
-
-        # Remove item from inventory (least-recently-picked-up, which is first in list)
-        item = self.world.robot.inventory.pop(0)
-
-        # Add to front cell
+        item = self.turtle.inventory.pop(0)
         if front_pos not in self.world.items:
             self.world.items[front_pos] = []
         self.world.items[front_pos].append(item)
-
-        # Update the display at the front position (but don't redraw the path segment)
         self.world.update_item_display(front_pos, False)
-        self.redraw_last = True
-
+        self.world.note_cell_erased()
         return item.item_type
-    
+
     def build_wall(self):
         """Build a wall in front of the robot."""
-        # Determine where the wall would be placed
-        x, y = self.world.robot_position
-        heading = self.world.robot_heading
-        
-        # Calculate the unit wall segment to add
-        if heading == "north":
+        x, y = self.cell
+        if self.heading == "north":
             wall = ((x, y + 1), (x + 1, y + 1))
-        elif heading == "east":
+        elif self.heading == "east":
             wall = ((x + 1, y), (x + 1, y + 1))
-        elif heading == "south":
+        elif self.heading == "south":
             wall = ((x, y), (x + 1, y))
         else:  # west
             wall = ((x, y), (x, y + 1))
-        
-        # Add the unit segment to the set
         self.world.wall_segments.add(wall)
-        
-        # Save robot state
-        robot_pos = self.world.robot_position
-        robot_heading = self.world.robot_heading
-        heading_angles = {"north": 90, "east": 0, "south": 270, "west": 180}
-        
-        # Redraw the world
-        self.world.screen.tracer(0)  # Disable animation for redraw
-        self.world.screen.clear()
-        self.world.draw_grid()
-        
-        # Restore robot
-        self.world.robot.showturtle()
-        self.world.robot.penup()
-        screen_pos = self.world.cell_centre(robot_pos)
-        self.world.robot.goto(*screen_pos)
-        self.world.robot.setheading(heading_angles[robot_heading])
-        self.world.screen.update()
-        self.world.screen.tracer(1)  # Re-enable animation
+        self.world.redraw_world()
+
+    def speed(self, speed_factor: int):
+        """Set this robot's speed from 1 (slow) to 10 (fast). 0 is superfast."""
+        self.turtle.speed(speed_factor)
 
     def get_turtle(self):
         """Not-for-general-use method to get the underlying Turtle"""
-        return self.world.robot
-    
-    # Query methods
-    def at_goal(self) -> bool:
-        """Check if the robot is at its target position,
-           as defined by the relevant world subclass.
-        """
-        return self.world.at_goal()
-    
-    def front_is_clear(self) -> bool:
-        """Check if the cell in front is clear (no wall, not blocked)."""
-        x, y = self.world.robot_position
-        heading = self.world.robot_heading
-        
-        new_pos = {
-            "north": (x, y + 1),
-            "east": (x + 1, y),
-            "south": (x, y - 1),
-            "west": (x - 1, y)
-        }[heading]
+        return self.turtle
 
-        # Check for walls (including perimeter)
-        if self.world.is_wall_between(self.world.robot_position, new_pos):
-            return False
-        
-        # Check for blocked cells
-        if new_pos in self.world.blocked_cells:
-            return False
-        
-        return True
-    
+    # ---- queries ----
+    def at_goal(self) -> bool:
+        """Check if the world's goal (as defined by the world subclass) is satisfied."""
+        return self.world.at_goal()
+
+    def front_is_clear(self) -> bool:
+        """Check if the cell in front is clear (no wall, not blocked, no other robot)."""
+        new_pos = self._cell_ahead()
+        return not (self.world.is_wall_between(self.cell, new_pos)
+                    or new_pos in self.world.blocked_cells
+                    or self.world.other_robot_at(new_pos, self) is not None)
+
     def right_is_clear(self) -> bool:
         """Check if the cell to the right is clear."""
-        x, y = self.world.robot_position
-        heading = self.world.robot_heading
-        
-        # Calculate position to the right without actually turning
-        right_pos = {
-            "north": (x + 1, y),      # Right of north is east
-            "east": (x, y - 1),       # Right of east is south
-            "south": (x - 1, y),      # Right of south is west
-            "west": (x, y + 1)        # Right of west is north
-        }[heading]
-        
-        new_x, new_y = right_pos
-        
-        # Check bounds
-        if new_x < 0 or new_x >= self.world.grid_width or \
-           new_y < 0 or new_y >= self.world.grid_height:
-            return False
-        
-        # Check for walls
-        if self.world.is_wall_between(self.world.robot_position, right_pos):
-            return False
-        
-        # Check for blocked cells
-        if right_pos in self.world.blocked_cells:
-            return False
-        
-        return True
-    
+        right_pos = self._cell_right()
+        return (self._in_grid(right_pos)
+                and not self.world.is_wall_between(self.cell, right_pos)
+                and right_pos not in self.world.blocked_cells)
+
     def wall_in_front(self) -> bool:
         """Check if there's a wall directly in front."""
-        x, y = self.world.robot_position
-        heading = self.world.robot_heading
-        
-        new_pos = {
-            "north": (x, y + 1),
-            "east": (x + 1, y),
-            "south": (x, y - 1),
-            "west": (x - 1, y)
-        }[heading]
-        
-        return self.world.is_wall_between(self.world.robot_position, new_pos)
-    
+        return self.world.is_wall_between(self.cell, self._cell_ahead())
+
     def wall_on_right(self) -> bool:
         """Check if there's a wall on the right side."""
-        x, y = self.world.robot_position
-        heading = self.world.robot_heading
-        
-        # Calculate position to the right without actually turning
-        right_pos = {
-            "north": (x + 1, y),      # Right of north is east
-            "east": (x, y - 1),       # Right of east is south
-            "south": (x - 1, y),      # Right of south is west
-            "west": (x, y + 1)        # Right of west is north
-        }[heading]
-        
-        return self.world.is_wall_between(self.world.robot_position, right_pos)
-    
+        return self.world.is_wall_between(self.cell, self._cell_right())
+
     def object_here(self) -> bool:
         """Check if there's an object in the current cell."""
-        pos = self.world.robot_position
-        return pos in self.world.items and len(self.world.items[pos]) > 0
-    
+        return self.cell in self.world.items and len(self.world.items[self.cell]) > 0
+
     def carries_object(self) -> bool:
         """Check if the robot is carrying any objects."""
-        return self.world.robot.has_item()
+        return self.turtle.has_item()
 
     def inventory(self) -> list:
         """Return a list of the type names of items in the robot's inventory,
            ordered by when they were picked up, most recently picked up last.
         """
-        return [item.item_type for item in self.world.robot.inventory]
-    
+        return [item.item_type for item in self.turtle.inventory]
+
     def is_facing_north(self) -> bool:
         """Check if the robot is facing north."""
-        return self.world.robot_heading == "north"
-    
+        return self.heading == "north"
+
     def position(self) -> tuple:
         """Return the robot's current grid coordinates as an (x, y) tuple."""
-        return self.world.robot_position
+        return self.cell
 
     def target_cell(self):
         """Return the target cell's (x, y) tuple, or None if no target is defined."""
@@ -1054,17 +1135,22 @@ class BotController:
 
     def facing(self) -> str:
         """Return the robot's heading as 'N', 'S', 'E', or 'W'."""
-        return {'north': 'N', 'south': 'S', 'east': 'E', 'west': 'W'}[self.world.robot_heading]
+        return {'north': 'N', 'south': 'S', 'east': 'E', 'west': 'W'}[self.heading]
 
     def print_state(self):
         """Print robot position and heading"""
-        print(f"Robot is at {self.world.robot_position} heading {self.world.robot_heading}")
+        print(f"RoboTurtle is at {self.cell} heading {self.heading}")
 
     def send_text(self, s: str):
         """Display the given text string in the world's text output area.
+           The text is prefixed with this robot's name and a colon and space.
            Requires 'expected_texts' to have been set in this test's world_params.
         """
-        self.world.send_text(s)
+        if not isinstance(s, str):
+            raise RuntimeError('"send_text" must take a string as a parameter. '
+                                f'But I got {type(s).__name__}.')
+        self.world.send_text(f"{self.name}: {s}")
+
 
 # ============================================================================
 # World Loading
@@ -1080,10 +1166,9 @@ class NoWorldLoaded:
     def __call__(self, *args, **kwargs):
         raise RuntimeError("No world loaded. Call roboturtle.load() first.")
 
-# Global world instance for simple function-based interface
+# The world most recently loaded; RoboTurtle() instances are created in it.
 
 _current_world = None
-_current_controller = NoWorldLoaded()
 
 
 def load(filename: str) -> World:
@@ -1101,7 +1186,7 @@ def load_string(s:str) -> dict:
 
 def load_world(data) -> World:
     """Given a world specification as a dictionary, extract all required data"""
-    global _current_world, _current_controller
+    global _current_world
     if "grid_size" not in data:
         raise ValueError("World file must specify 'grid_size'")
     
@@ -1131,23 +1216,27 @@ def load_world(data) -> World:
         for x in range(min(x0, x1), max(x0, x1) + 1):
             for y in range(min(y0, y1), max(y0, y1) + 1):
                 world.add_blocked_cell((x, y))
-    # Create robot
-    robot_start = data.get("robot_start", {"position": [0, 0], "heading": "north"})
-    start_pos = robot_start["position"]
-    world.create_robot(
-        tuple(start_pos),
-        robot_start.get("heading", "north")
-    )
-    world.path.append(tuple(start_pos))
+    # Robot start specs. Robots themselves are created by the student's code,
+    # one RoboTurtle(name) per spec. 'robot_start' (single robot) is still accepted.
+    starts = data.get("robots", [data.get("robot_start", {"position": [0, 0], "heading": "north"})])
+    default_colours = ['blue', 'red', 'green', 'orange', 'purple']
+    for i, start in enumerate(starts):
+        spec = dict(start)
+        spec["named"] = "name" in spec  # Explicitly named in the world, so label it on screen.
+        spec.setdefault("colour", default_colours[i % len(default_colours)])
+        spec.setdefault("name", f"robot{i + 1}" if len(starts) > 1 else "robot")
+        spec["inventory"] = []
+        world.robot_specs.append(spec)
 
-    # Add items, either to world or Robot inventory.
+    # Add items, either to world or a robot's starting inventory.
     for item_data in data.get("items", []):
         item_type = item_data['type']
         position = item_data['position']
         count = item_data.get("count", 1)
         if str(position).lower() == 'inventory':
+            robot_index = item_data.get("robot", 0)
             for i in range(count):
-                world.robot.add_item_to_inventory(Item(item_type))
+                world.robot_specs[robot_index]["inventory"].append(Item(item_type))
         else:
             world.add_item_to_cell(
                 Item(item_type),
@@ -1158,135 +1247,28 @@ def load_world(data) -> World:
     # Let the world snapshot/derive anything it needs now that it's fully populated.
     world.on_world_loaded()
 
-    # Draw the world
-    world.draw_grid()
+    # Draw the world, then show the robots at their start positions.
+    world.create_sprites()
+    world.draw_grid(restore_tracer=False)
+    world.screen.update()
+    world.screen.tracer(1)
 
     
     # Set as current world and create controller
     _current_world = world
-    _current_controller = BotController(world)
     
     return world
 
 # ============================================================================
-# Global command functions (Reeborg-style interface)
+# Global functions. The OO version has only speed(); everything else is a
+# method of RoboTurtle.
 # ============================================================================
 
 
-def move():
-    """Move the robot forward one cell."""
-    _current_controller.move()
-
-
-def turn_left():
-    """Turn the robot 90 degrees to the left."""
-    _current_controller.turn_left()
-
-
-def turn_right():
-    """Turn the robot 90 degrees to the right."""
-    _current_controller.turn_right()
-
-
-def take() -> str:
-    """Pick up an item from the current cell. Returns the item's type name."""
-    return _current_controller.take()
-
-
-def put() -> str:
-    """Place an item from inventory into the current cell. Returns the item's type name."""
-    return _current_controller.put()
-
-
-def toss() -> str:
-    """Toss an item from inventory into the cell directly in front of the robot.
-       Returns the item's type name.
-    """
-    return _current_controller.toss()
-
-def get_turtle():
-    """Not for general use - get the actual turtle"""
-    return _current_controller.get_turtle()
-
-def build_wall():
-    """Build a wall in front of the robot."""
-    _current_controller.build_wall()
-
-
-def at_goal() -> bool:
-    """Check if the robot is at the goal."""
-    return _current_controller.at_goal()
-
-
-def front_is_clear() -> bool:
-    """Check if the cell in front is clear."""
-    return _current_controller.front_is_clear()
-
-
-def right_is_clear() -> bool:
-    """Check if the cell to the right is clear."""
-    return _current_controller.right_is_clear()
-
-
-def wall_in_front() -> bool:
-    """Check if there's a wall directly in front."""
-    return _current_controller.wall_in_front()
-
-
-def wall_on_right() -> bool:
-    """Check if there's a wall on the right side."""
-    return _current_controller.wall_on_right()
-
-
-def object_here() -> bool:
-    """Check if there's an object in the current cell."""
-    return _current_controller.object_here()
-
-
-def carries_object() -> bool:
-    """Check if the robot is carrying any objects."""
-    return _current_controller.carries_object()
-
-
-def inventory() -> list:
-    """Return a list of the type names of items in the robot's inventory,
-       ordered by when they were picked up, most recently picked up last.
-    """
-    return _current_controller.inventory()
-
-
-def is_facing_north() -> bool:
-    """Check if the robot is facing north."""
-    return _current_controller.is_facing_north()
-
-
 def speed(speed_factor: int):
-    """Set the speed from 1 (slow) to 10 (fast). 0 is superfast."""
-    _current_world.robot.speed(speed_factor)
+    """Set the speed of all robots from 1 (slow) to 10 (fast). 0 is superfast."""
+    _current_world.set_speed(speed_factor)
 
-def position() -> tuple:
-    """Return the robot's current grid coordinates as an (x, y) tuple."""
-    return _current_controller.position()
-
-
-def target_cell():
-    """Return the target cell's (x, y) tuple, or None if no target is defined."""
-    return _current_controller.target_cell()
-
-
-def facing() -> str:
-    """Return the robot's current heading as 'N', 'S', 'E', or 'W'."""
-    return _current_controller.facing()
-
-
-def print_state():
-    """Print where the robot is and its heading"""
-    _current_controller.print_state()
-
-
-def send_text(s: str):
-    """Display the given text string in the world's text output area."""
-    _current_controller.send_text(s)
 
 </textarea>
 </div>
@@ -1334,37 +1316,50 @@ function toggleRoboTurtleHelp(textareaId) {
 </div>
 
 <div id="___textareaId___robotturtle-help" style="display:none; padding-top:20px;padding-left:15px">
-<h3>RoboTurtle Functions</h3>
-    <h5>Commands (all global functions) are:</h5>
+<h3>RoboTurtle Help</h3>
+    <h5>Creating a RoboTurtle</h5>
+    <p>Each robot in the world is shown on the grid, labelled with its name. Your code must create a <code>RoboTurtle</code> object for each one, giving its name as a string (names are case-sensitive), e.g.</p>
+    <pre>alice = RoboTurtle("Alice")
+bob = RoboTurtle("Bob")</pre>
+    <p>The object then controls the robot of that name. Each <code>RoboTurtle</code> has its own position, heading and inventory, and you command it by calling its <em>methods</em>, e.g. <code>alice.move()</code> or <code>bob.turn_left()</code>. The name is required: it is the one written under each robot on the grid.</p>
     <ul>
-    {% if 'move' not in disabledfunctions|default([]) %}<li><code>move()</code> - move one cell forward</li>{% endif %}
-    {% if 'turn_left' not in disabledfunctions|default([]) %}<li><code>turn_left()</code> - rotate 90 degrees counterclockwise</li>{% endif %}
-    {% if 'turn_right' not in disabledfunctions|default([]) %}<li><code>turn_right()</code> - rotate 90 degrees clockwise</li>{% endif %}
-    {% if 'take' not in disabledfunctions|default([]) %}<li><code>take()</code> - pick up an item from the current cell, place it in the inventory, and return its type name (e.g. <code>'star'</code>)</li>{% endif %}
-    {% if 'put' not in disabledfunctions|default([]) %}<li><code>put()</code> - place the least-recently-picked up object in the current cell and return its type name</li>{% endif %}
-    {% if 'toss' not in disabledfunctions|default([]) %}<li><code>toss()</code> - place the least-recently-picked up object in the cell directly in front of the current cell, and return its type name</li>{% endif %}
-    <!--li><code>build_wall()</code> - build a wall directly in front of the robot, i.e. at the edge of the current cell in the direction the robot is facing.<li-->
-    {% if 'send_text' not in disabledfunctions|default([]) %}<li id="___textareaId___help-send-text" style="display:none"><code>send_text(s)</code> - display the string <code>s</code> in the text bar below the grid (only usable if this test supports it)</li>{% endif %}
-    {% if 'print_state' not in disabledfunctions|default([]) %}<li><code>print_state()</code> - print robot position and heading.</li>{% endif %}
-    {% if 'speed' not in disabledfunctions|default([]) %}<li><code>speed(n)</code> - set speed to n where n in range 1 - 10 (slow to fast). n = 0 for max possible speed.</li>{% endif %}
+    <li><code>RoboTurtle(name)</code> - create the RoboTurtle for the robot with the given name (a string).</li>
     </ul>
-    <h5>State-checking boolean functions</h5>
+    <p>In the descriptions below, <code>t</code> stands for any RoboTurtle object, e.g. <code>alice</code>.</p>
+    <h5>Command methods</h5>
     <ul>
-    {% if 'at_goal' not in disabledfunctions|default([]) %}<li><code>at_goal()</code> - true if the robot is at the specified goal position</li>{% endif %}
-    {% if 'front_is_clear' not in disabledfunctions|default([]) %}<li><code>front_is_clear()</code> - true if the robot is able to move forward</li>{% endif %}
-    {% if 'right_is_clear' not in disabledfunctions|default([]) %}<li><code>right_is_clear()</code> - true if the cell to the right is clear</li>{% endif %}
-    {% if 'wall_in_front' not in disabledfunctions|default([]) %}<li><code>wall_in_front()</code> - true if there's a wall in front</li>{% endif %}
-    {% if 'wall_on_right' not in disabledfunctions|default([]) %}<li><code>wall_on_right()</code> - true if there's a wall to the right</li>{% endif %}
-    {% if 'object_here' not in disabledfunctions|default([]) %}<li><code>object_here()</code> - true if there's an object in the current cell</li>{% endif %}
-    {% if 'carries_object' not in disabledfunctions|default([]) %}<li><code>carries_object()</code> - true if the inventory is non-empty</li>{% endif %}
-    {% if 'is_facing_north' not in disabledfunctions|default([]) %}<li><code>is_facing_north()</code> - true if the robot is facing north</li>{% endif %}
+    <li><code>t.move()</code> - move one cell forward. It's an error if there's a wall, a blocked cell or another robot in the way</li>
+    <li><code>t.turn_left()</code> - rotate 90 degrees counterclockwise</li>
+    <li><code>t.turn_right()</code> - rotate 90 degrees clockwise</li>
+    <li><code>t.take()</code> - pick up an item from the current cell, place it in the inventory, and return its type name (e.g. <code>'star'</code>)</li>
+    <li><code>t.put()</code> - place the least-recently-picked up object in the current cell and return its type name</li>
+    <li><code>t.toss()</code> - place the least-recently-picked up object in the cell directly in front of the current cell (even if there's a wall in between), and return its type name</li>
+    <!--li><code>t.build_wall()</code> - build a wall directly in front of the robot, i.e. at the edge of the current cell in the direction the robot is facing.<li-->
+    <li id="___textareaId___help-send-text" style="display:none"><code>t.send_text(s)</code> - display the string <code>s</code>, prefixed by the robot's name and a colon, in the text bar below the grid (only usable if this test supports it)</li>
+    <li><code>t.print_state()</code> - print the robot's position and heading.</li>
+    <li><code>t.speed(n)</code> - set this robot's speed to n where n is in the range 1 - 10 (slow to fast). n = 0 for max possible speed.</li>
     </ul>
-    <h5>State-query functions</h5>
+    <h5>State-checking boolean methods</h5>
     <ul>
-    {% if 'position' not in disabledfunctions|default([]) %}<li><code>position()</code> - return the robot's current grid coordinates as an <code>(x, y)</code> tuple</li>{% endif %}
-    {% if 'target_cell' not in disabledfunctions|default([]) %}<li><code>target_cell()</code> - return the target cell's coordinates as an <code>(x, y)</code> tuple, or <code>None</code> if no target is defined</li>{% endif %}
-    {% if 'inventory' not in disabledfunctions|default([]) %}<li><code>inventory()</code> - return a new list containing the type names of items in the inventory, ordered by when they were picked up (most recently picked up last)</li>{% endif %}
-    {% if 'facing' not in disabledfunctions|default([]) %}<li><code>facing()</code> - return the robot's current heading as <code>'N'</code>, <code>'S'</code>, <code>'E'</code>, or <code>'W'</code></li>{% endif %}
+    <li><code>t.at_goal()</code> - true if the goal for the whole world is currently satisfied</li>
+    <li><code>t.front_is_clear()</code> - true if the robot is able to move forward</li>
+    <li><code>t.right_is_clear()</code> - true if the cell to the right is clear</li>
+    <li><code>t.wall_in_front()</code> - true if there's a wall in front</li>
+    <li><code>t.wall_on_right()</code> - true if there's a wall to the right</li>
+    <li><code>t.object_here()</code> - true if there's an object in the current cell</li>
+    <li><code>t.carries_object()</code> - true if the inventory is non-empty</li>
+    <li><code>t.is_facing_north()</code> - true if the robot is facing north</li>
+    </ul>
+    <h5>State-query methods</h5>
+    <ul>
+    <li><code>t.position()</code> - return the robot's current grid coordinates as an <code>(x, y)</code> tuple</li>
+    <li><code>t.target_cell()</code> - return the target cell's coordinates as an <code>(x, y)</code> tuple, or <code>None</code> if no target is defined</li>
+    <li><code>t.inventory()</code> - return a new list containing the type names of items in the inventory, ordered by when they were picked up (most recently picked up last)</li>
+    <li><code>t.facing()</code> - return the robot's current heading as <code>'N'</code>, <code>'S'</code>, <code>'E'</code>, or <code>'W'</code></li>
+    </ul>
+    <h5>Global function</h5>
+    <ul>
+    <li><code>speed(n)</code> - set the speed of all the robots at once (same range as above)</li>
     </ul>
 
 </div> 

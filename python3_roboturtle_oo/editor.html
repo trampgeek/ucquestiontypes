@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RoboTurtle World Editor (OO)</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: sans-serif; background: #eee; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+#header { background: #2c5f8a; color: white; padding: 8px 16px; font-size: 17px; font-weight: bold; flex-shrink: 0; }
+
+#tab-bar { display: flex; align-items: center; background: #d0d8e0; padding: 5px 8px 0; gap: 3px; flex-shrink: 0; border-bottom: 2px solid #aab; }
+.tab { padding: 5px 14px; cursor: pointer; background: #bbc; color: #333; border: 1px solid #99a; border-bottom: none; border-radius: 5px 5px 0 0; font-size: 13px; }
+.tab.active { background: white; color: #000; border-color: #aab; font-weight: bold; }
+.tab-action { padding: 4px 9px; cursor: pointer; border: 1px solid #888; border-radius: 4px; font-size: 12px; margin-left: 4px; background: #f5f5f5; }
+#btn-add-tab { background: #4a9; color: white; border-color: #3a8; }
+
+#main { display: flex; flex: 1; overflow: hidden; }
+
+#sidebar { width: 260px; background: white; border-right: 1px solid #ccc; overflow-y: auto; padding: 8px; font-size: 12px; flex-shrink: 0; }
+#sidebar h3 { font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin: 10px 0 4px; padding-bottom: 2px; border-bottom: 1px solid #eee; }
+#sidebar h3:first-child { margin-top: 2px; }
+#sidebar label { display: block; margin: 3px 0 1px; color: #444; }
+#sidebar input[type=number], #sidebar select { border: 1px solid #ccc; border-radius: 3px; padding: 2px 4px; font-size: 12px; }
+#sidebar select { width: 100%; }
+
+.tool-btn { display: block; width: 100%; text-align: left; padding: 5px 8px; margin: 2px 0; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: #f5f5f5; font-size: 12px; }
+.tool-btn.active { background: #2c5f8a; color: white; border-color: #1a4a70; }
+.tool-btn:hover:not(.active) { background: #e0ecff; }
+
+.row { display: flex; gap: 6px; align-items: center; margin: 3px 0; flex-wrap: wrap; }
+.row label { flex-shrink: 0; }
+.row input[type=number] { width: 52px; }
+
+.heading-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; margin: 4px 0; }
+.heading-btn { padding: 4px; border: 1px solid #ccc; cursor: pointer; font-size: 11px; background: #f5f5f5; border-radius: 3px; text-align: center; }
+.heading-btn.active { background: #2c5f8a; color: white; }
+.heading-btn.spacer { visibility: hidden; }
+
+.small-btn { padding: 3px 7px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; background: #f5f5f5; margin: 2px 2px 0 0; }
+.small-btn:hover { background: #e0ecff; }
+
+#canvas-wrap { flex: 1; overflow: auto; padding: 10px; background: #e8e8e8; }
+canvas { border: 1px solid #aaa; display: block; background: white; cursor: crosshair; }
+
+#json-panel { height: 150px; background: #f4f4f4; border-top: 1px solid #ccc; display: flex; gap: 8px; padding: 8px; flex-shrink: 0; }
+#json-panel textarea { flex: 1; font-family: monospace; font-size: 11px; border: 1px solid #ccc; border-radius: 3px; resize: none; padding: 4px; }
+#json-btns { display: flex; flex-direction: column; gap: 5px; width: 100px; flex-shrink: 0; }
+#json-btns button { padding: 7px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; font-weight: bold; }
+#btn-import { background: #4a9; color: white; border-color: #3a8; }
+#btn-export { background: #2c5f8a; color: white; border-color: #1a4a70; }
+#btn-copy { background: #555; color: white; border-color: #444; }
+
+#status { background: #fff8dc; border-top: 1px solid #e0d060; padding: 3px 10px; font-size: 11px; color: #555; flex-shrink: 0; min-height: 20px; }
+
+#resizer { height: 6px; background: #d0d8e0; border-top: 1px solid #aab; border-bottom: 1px solid #aab; cursor: row-resize; flex-shrink: 0; }
+#resizer:hover, #resizer.active { background: #9ab; }
+
+.robot-row { display: flex; align-items: center; gap: 5px; padding: 3px 5px; border: 1px solid #ccc; border-radius: 4px; margin: 2px 0; cursor: pointer; font-size: 12px; background: #fafafa; }
+.robot-row.sel { background: #e0ecff; border-color: #2c5f8a; font-weight: bold; }
+.swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #333; flex-shrink: 0; }
+#robot-detail { border: 1px solid #dde; border-radius: 4px; padding: 4px 6px; margin-top: 4px; background: #fcfcff; }
+#robot-detail input[type=text] { border: 1px solid #ccc; border-radius: 3px; padding: 2px 4px; font-size: 12px; width: 100%; }
+.item-row { display: flex; gap: 4px; align-items: center; margin: 2px 0; font-size: 11px; }
+.item-row input[type=number] { width: 40px; }
+.del-item { cursor: pointer; color: #c00; font-weight: bold; padding: 0 3px; }
+</style>
+</head>
+<body>
+
+<div id="header">RoboTurtle World Editor <span style="font-weight:normal;font-size:12px">&mdash; OO (named robots) version</span></div>
+
+<div id="tab-bar">
+  <button class="tab-action" id="btn-add-tab">+ Add test</button>
+  <button class="tab-action" id="btn-dup-tab">Duplicate</button>
+  <button class="tab-action" id="btn-del-tab">Delete</button>
+</div>
+
+<div id="main">
+  <div id="sidebar">
+
+    <h3>World Class</h3>
+    <select id="sel-world-class">
+      <option value="TargetWorld">TargetWorld</option>
+      <option value="PathWorld">PathWorld</option>
+      <option value="PickUpItemsWorld">PickUpItemsWorld</option>
+    </select>
+    <div id="world-params-ui"></div>
+
+    <h3>Grid</h3>
+    <div class="row">
+      <label>W <input type="number" id="inp-gw" min="1" max="25" value="10"></label>
+      <label>H <input type="number" id="inp-gh" min="1" max="25" value="10"></label>
+    </div>
+    <div class="row">
+      <label>Cell px <input type="number" id="inp-cs" min="0" max="100" value="0"></label>
+      <span style="color:#888;font-size:10px">(0=auto)</span>
+    </div>
+
+    <h3>Robots</h3>
+    <div id="robots-ui"></div>
+
+    <h3>Tool</h3>
+    <button class="tool-btn active" data-tool="blocked" title="Click/drag cells to toggle blocked (green)">Blocked cell</button>
+    <button class="tool-btn" data-tool="wall"    title="Click or drag along a grid line to add/remove a run of walls">Wall</button>
+    <button class="tool-btn" data-tool="robot"   title="Click a cell to move the selected robot's start; click another robot to select it">Robot start</button>
+    <button class="tool-btn" data-tool="target"  title="Click a cell to set the selected robot's target (TargetWorld / PickUpItemsWorld)">Target cell</button>
+    <button class="tool-btn" data-tool="item"    title="Click a cell to place/remove an item">Place item</button>
+    <button class="tool-btn" data-tool="path"    title="Click to add one cell; drag to extend continuously; click last cell to undo">Draw path</button>
+
+    <div id="item-ui" style="display:none">
+      <h3>Item</h3>
+      <label>Type</label>
+      <select id="sel-item-type">
+        <option value="star">⭐ star</option>
+        <option value="key">🔑 key</option>
+        <option value="leaf">🍁 leaf</option>
+        <option value="house">🏠 house</option>
+        <option value="home">🏠 home</option>
+        <option value="flag">🏁 flag</option>
+        <option value="trash">🗑 trash</option>
+        <option value="box">📦 box</option>
+        <option value="target">🎯 target</option>
+        <option value="banana">🍌 banana</option>
+        <option value="apple">🍎 apple</option>
+      </select>
+      <div class="row" style="margin-top:4px">
+        <label>Count <input type="number" id="inp-item-count" min="1" max="99" value="1"></label>
+      </div>
+      <label style="margin-top:4px"><input type="checkbox" id="chk-inventory"> In robot inventory</label>
+    </div>
+
+    <div id="path-ui" style="display:none">
+      <h3>Path</h3>
+      <div id="path-info" style="color:#555; margin:3px 0">0 cells</div>
+      <button class="small-btn" onclick="undoPath()">Undo last</button>
+      <button class="small-btn" onclick="clearPath()">Clear path</button>
+    </div>
+
+    <h3>Items in World</h3>
+    <div id="items-list"></div>
+    <button class="small-btn" onclick="addInventoryItem()" style="margin-top:4px">+ Inventory item (selected robot)</button>
+
+  </div>
+
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+  </div>
+</div>
+
+<div id="status">Click a cell to toggle blocked (green). Use the tool buttons to switch modes.</div>
+
+<div id="resizer" title="Drag to resize"></div>
+
+<div id="json-panel">
+  <div id="json-btns">
+    <button id="btn-import">Import</button>
+    <button id="btn-export">Export</button>
+    <button id="btn-copy">Copy</button>
+  </div>
+  <textarea id="json-area" placeholder="Paste full JSON here and click Import, or click Export to generate the JSON for Moodle."></textarea>
+</div>
+
+<script>
+'use strict';
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const MARGIN = 44;
+const DEFAULT_CS = 60;
+const ITEM_EMOJI = { star:'⭐', key:'🔑', leaf:'🍁', house:'🏠', home:'🏠', flag:'🏁', trash:'🗑', box:'📦', target:'🎯', banana:'🍌', apple:'🍎' };
+const FILL_COLOR = '#4CBB17';
+const WALL_COLOR = '#8B0000';
+const ROBOT_COLOR = '#FF6600';
+const ROBOT_COLOURS = ['blue', 'red', 'green', 'orange', 'purple', 'brown', 'magenta', 'black'];  // Same order as worldloader's defaults
+const DEFAULT_NAMES = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi'];
+const OUTLINE_HOUSE = 'house_outline';
+const OUTLINE_COLOUR = '#c4c4c4';
+const PATH_COLOR = 'rgba(60,120,220,0.22)';
+const PATH_LINE = 'rgba(40,100,200,0.75)';
+const HOVER_WALL_COLOR = 'rgba(200,0,0,0.55)';
+const TARGET_HOVER = 'rgba(255,255,180,0.6)';
+const TEXT_BAR_H = 34;
+const TEXT_LABEL_W = 62;
+
+// ─── Data model ──────────────────────────────────────────────────────────────
+
+function newRobot(i) {
+  return { name: DEFAULT_NAMES[i % DEFAULT_NAMES.length], position: [0, 0], heading: 'north', colour: ROBOT_COLOURS[i % ROBOT_COLOURS.length],
+           target: null,   // [x, y] or null
+           path: [] };     // [[x,y],...] cell sequence for PathWorld
+}
+
+function newTC() {
+  const r = newRobot(0);
+  r.target = [9, 9];
+  return {
+    grid_size: [10, 10],
+    cell_size: 0,          // 0 = auto; stored in world_params on export
+    world_class: 'TargetWorld',
+    world_params: {},
+    robots: [r],
+    sel: 0,                 // index of the selected robot
+    walls: new Set(),       // canonical "x1,y1,x2,y2" strings
+    blocked: new Set(),     // "x,y" strings
+    items: []               // [{type, position:[x,y]|'inventory', count, robot?}]
+  };
+}
+
+let tests = [newTC()];
+let cur = 0;
+let tool = 'blocked';
+let hoverCell = null;    // [gx, gy] or null
+let hoverEdge = null;    // [[x1,y1],[x2,y2]] or null
+let dragMode = null;     // 'add' | 'del' for blocked drag
+let wallLine = null;      // { isHoriz, gridLine, startOff, adding } – drag wall state
+let wallLineEnd = 0;      // current end offset for wallLine preview
+let pathDragState = null; // { startCell, lastCell, hasMoved } – path drag state
+
+function T() { return tests[cur]; }
+function R() { return T().robots[T().sel]; }              // the selected robot
+function robotLabel(t, i) { return t.robots[i].name || DEFAULT_NAMES[i % DEFAULT_NAMES.length]; }   // blank names fall back to the default
+function hasTargets(t) { return t.world_class === 'TargetWorld' || t.world_class === 'PickUpItemsWorld'; }
+function labelTargets(t) { return t.world_params.target_labels !== false; }
+
+// ─── Wall key helpers ─────────────────────────────────────────────────────────
+
+function wKey(x1, y1, x2, y2) {
+  return (x1 < x2 || (x1 === x2 && y1 < y2))
+    ? `${x1},${y1},${x2},${y2}`
+    : `${x2},${y2},${x1},${y1}`;
+}
+function wParse(k) {
+  const [x1,y1,x2,y2] = k.split(',').map(Number);
+  return [[x1,y1],[x2,y2]];
+}
+
+// ─── Canvas helpers ───────────────────────────────────────────────────────────
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function cs() {
+  const v = parseInt(document.getElementById('inp-cs').value) || 0;
+  if (v > 0) return v;
+  const t = T();
+  const [gw, gh] = t.grid_size;
+  return Math.max(20, Math.min(DEFAULT_CS, Math.floor(560 / Math.max(gw, gh))));
+}
+
+// Grid point → canvas pixel
+function g2c(gx, gy) {
+  const [, gh] = T().grid_size;
+  const s = cs();
+  return [MARGIN + gx * s, MARGIN + (gh - gy) * s];
+}
+
+// Cell centre → canvas pixel
+function cc(gx, gy) {
+  const s = cs();
+  const [cx, cy] = g2c(gx, gy + 1);
+  return [cx + s / 2, cy + s / 2];
+}
+
+// Canvas pixel → continuous grid coords
+function c2g(px, py) {
+  const [, gh] = T().grid_size;
+  const s = cs();
+  return [(px - MARGIN) / s, gh - (py - MARGIN) / s];
+}
+
+// Canvas pixel → cell [gx, gy] or null if outside
+function c2cell(px, py) {
+  const [gxf, gyf] = c2g(px, py);
+  const [gw, gh] = T().grid_size;
+  const gx = Math.floor(gxf), gy = Math.floor(gyf);
+  return (gx >= 0 && gx < gw && gy >= 0 && gy < gh) ? [gx, gy] : null;
+}
+
+// Canvas pixel → nearest edge [[x1,y1],[x2,y2]] or null
+function c2edge(px, py) {
+  const [gxf, gyf] = c2g(px, py);
+  const [gw, gh] = T().grid_size;
+  const s = cs();
+  const SNAP = s * 0.28;
+
+  const nx = Math.round(gxf), ny = Math.round(gyf);
+  const dv = Math.abs(gxf - nx) * s;
+  const dh = Math.abs(gyf - ny) * s;
+
+  let best = null, bestD = SNAP;
+
+  if (nx >= 0 && nx <= gw && dv < bestD) {
+    const cy2 = Math.floor(gyf);
+    // nx===0 and nx===gw are the left/right perimeter – skip them
+    if (cy2 >= 0 && cy2 < gh && nx > 0 && nx < gw) { best = [[nx, cy2], [nx, cy2+1]]; bestD = dv; }
+  }
+  if (ny >= 0 && ny <= gh && dh < bestD) {
+    const cx2 = Math.floor(gxf);
+    // ny===0 and ny===gh are the bottom/top perimeter – skip them
+    if (cx2 >= 0 && cx2 < gw && ny > 0 && ny < gh) { best = [[cx2, ny], [cx2+1, ny]]; }
+  }
+  return best;
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+
+function render() {
+  const t = T();
+  const [gw, gh] = t.grid_size;
+  const s = cs();
+  const textBarH = Array.isArray(t.world_params.expected_texts) ? TEXT_BAR_H : 0;
+  const W = MARGIN * 2 + gw * s;
+  const H = MARGIN * 2 + gh * s + textBarH;
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, W, H);
+
+  // Blocked cells
+  ctx.fillStyle = FILL_COLOR;
+  for (const k of t.blocked) {
+    const [bx, by] = k.split(',').map(Number);
+    const [cx, cy] = g2c(bx, by + 1);
+    ctx.fillRect(cx, cy, s, s);
+  }
+
+  // Path background (PathWorld), one tint per robot
+  if (t.world_class === 'PathWorld') {
+    for (const r of t.robots) {
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = r.colour;
+      for (const [px, py] of r.path) {
+        const [cx, cy] = g2c(px, py + 1);
+        ctx.fillRect(cx, cy, s, s);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Hover cell highlight
+  if (hoverCell && tool !== 'wall') {
+    const [hx, hy] = hoverCell;
+    const [cx, cy] = g2c(hx, hy + 1);
+    ctx.fillStyle = TARGET_HOVER;
+    ctx.fillRect(cx, cy, s, s);
+  }
+
+  // Grid lines
+  ctx.strokeStyle = '#999';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x <= gw; x++) {
+    const [cx, cy1] = g2c(x, 0); const [, cy2] = g2c(x, gh);
+    ctx.beginPath(); ctx.moveTo(cx, cy1); ctx.lineTo(cx, cy2); ctx.stroke();
+  }
+  for (let y = 0; y <= gh; y++) {
+    const [cx1, cy] = g2c(0, y); const [cx2] = g2c(gw, y);
+    ctx.beginPath(); ctx.moveTo(cx1, cy); ctx.lineTo(cx2, cy); ctx.stroke();
+  }
+
+  // Axis labels
+  ctx.fillStyle = '#555';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let x = 0; x < gw; x++) ctx.fillText(x, MARGIN + x * s + s/2, MARGIN + gh * s + 16);
+  for (let y = 0; y < gh; y++) ctx.fillText(y, MARGIN - 16, MARGIN + (gh - y - 1) * s + s/2);
+
+  // Walls
+  ctx.strokeStyle = WALL_COLOR;
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'butt';
+  for (const k of t.walls) {
+    const [[x1,y1],[x2,y2]] = wParse(k);
+    const [cx1,cy1] = g2c(x1,y1); const [cx2,cy2] = g2c(x2,y2);
+    ctx.beginPath(); ctx.moveTo(cx1,cy1); ctx.lineTo(cx2,cy2); ctx.stroke();
+  }
+
+  // Perimeter walls (Python always adds these; shown here for fidelity)
+  ctx.strokeStyle = WALL_COLOR;
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'square';
+  const [_pl, _pb] = g2c(0, 0); const [_pr, _pt] = g2c(gw, gh);
+  ctx.beginPath();
+  ctx.moveTo(_pl,_pb); ctx.lineTo(_pr,_pb);
+  ctx.moveTo(_pl,_pt); ctx.lineTo(_pr,_pt);
+  ctx.moveTo(_pl,_pb); ctx.lineTo(_pl,_pt);
+  ctx.moveTo(_pr,_pb); ctx.lineTo(_pr,_pt);
+  ctx.stroke();
+
+  // Shift-drag wall preview
+  if (wallLine !== null) {
+    const mn = Math.min(wallLine.startOff, wallLineEnd), mx2 = Math.max(wallLine.startOff, wallLineEnd);
+    ctx.lineWidth = 5; ctx.lineCap = 'butt';
+    ctx.strokeStyle = wallLine.adding ? 'rgba(139,0,0,0.75)' : 'rgba(220,50,50,0.6)';
+    if (!wallLine.adding) ctx.setLineDash([6, 4]);
+    for (let i = mn; i <= mx2; i++) {
+      let p1, p2;
+      if (wallLine.isHoriz) { p1 = g2c(i, wallLine.gridLine); p2 = g2c(i+1, wallLine.gridLine); }
+      else                  { p1 = g2c(wallLine.gridLine, i); p2 = g2c(wallLine.gridLine, i+1); }
+      ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  // Single-edge hover highlight (wall tool, no shift drag active)
+  if (tool === 'wall' && hoverEdge && wallLine === null) {
+    const [[x1,y1],[x2,y2]] = hoverEdge;
+    const key = wKey(x1,y1,x2,y2);
+    const [cx1,cy1] = g2c(x1,y1); const [cx2,cy2] = g2c(x2,y2);
+    ctx.strokeStyle = t.walls.has(key) ? 'rgba(220,0,0,0.7)' : HOVER_WALL_COLOR;
+    ctx.lineWidth = 5;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(cx1,cy1); ctx.lineTo(cx2,cy2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Items in world
+  for (const item of t.items) {
+    if (!Array.isArray(item.position)) continue;
+    const [ix, iy] = item.position;
+    const [cx, cy] = cc(ix, iy);
+    drawEmoji(ITEM_EMOJI[item.type] || '📦', cx, cy, s * 0.5);
+    if (item.count > 1) {
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillStyle = '#000';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(item.count, cx + s*0.22, cy - s*0.44);
+    }
+  }
+
+  // Target cells, one per robot that has one (TargetWorld / PickUpItemsWorld)
+  if (hasTargets(t)) {
+    const icon = t.world_params.target_icon || 'flag';
+    t.robots.forEach((r, i) => {
+      if (!r.target) return;
+      const [cx, cy] = cc(r.target[0], r.target[1]);
+      drawIconByName(icon, cx, cy, s * 0.5, '🏁');
+    });
+  }
+
+  // Item dumps (PickUpItemsWorld)
+  if (t.world_class === 'PickUpItemsWorld' && Array.isArray(t.world_params.item_dumps)) {
+    for (const dump of t.world_params.item_dumps) {
+      if (!Array.isArray(dump.location)) continue;
+      const [dx, dy] = dump.location;
+      const [cx, cy] = cc(dx, dy);
+      drawIconByName(dump.icon, cx, cy, s * 0.5, '🗑');
+    }
+  }
+
+  // Labelled cells (world_params.labelled_cells)
+  if (Array.isArray(t.world_params.labelled_cells)) {
+    for (const [[lx, ly], iconName] of t.world_params.labelled_cells) {
+      const [cx, cy] = cc(lx, ly);
+      drawIconByName(iconName, cx, cy, s * 0.5, '📦');
+    }
+  }
+
+  // Path lines (PathWorld), one per robot in the robot's colour
+  if (t.world_class === 'PathWorld') {
+    for (const r of t.robots) {
+      if (r.path.length < 2) continue;
+      ctx.strokeStyle = r.colour;
+      ctx.globalAlpha = 0.8;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let [px, py] = cc(r.path[0][0], r.path[0][1]);
+      ctx.moveTo(px, py);
+      for (let i = 1; i < r.path.length; i++) {
+        [px, py] = cc(r.path[i][0], r.path[i][1]);
+        ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      const prev = cc(r.path[r.path.length-2][0], r.path[r.path.length-2][1]);
+      const end  = cc(r.path[r.path.length-1][0], r.path[r.path.length-1][1]);
+      drawArrow(prev, end, r.colour);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Name labels: each robot's name at its start cell, and "→name" at its target
+  // (only when there are several robots or the robots are named, as in the live question).
+  {
+    const targetCells = new Set();
+    if (hasTargets(t) && labelTargets(t)) t.robots.forEach(r => { if (r.target) targetCells.add(r.target.join(',')); });
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textBaseline = 'alphabetic';
+    t.robots.forEach((r, i) => {
+      const [cx, cy] = cc(r.position[0], r.position[1]);
+      ctx.fillStyle = r.colour;
+      if (targetCells.has(r.position.join(','))) {
+        ctx.textAlign = 'left';
+        ctx.fillText(robotLabel(t, i), cx - s / 2 + 3, cy + s * 0.40);
+      } else {
+        ctx.textAlign = 'center';
+        ctx.fillText(robotLabel(t, i), cx, cy + s * 0.40);
+      }
+    });
+    if (targetCells.size) {
+      ctx.textAlign = 'right';
+      t.robots.forEach((r, i) => {
+        if (!r.target) return;
+        const [cx, cy] = cc(r.target[0], r.target[1]);
+        ctx.fillStyle = r.colour;
+        ctx.fillText('→' + robotLabel(t, i), cx + s / 2 - 3, cy + s * 0.40);
+      });
+    }
+  }
+
+  // Robots (selected one gets a ring)
+  t.robots.forEach((r, i) => {
+    if (i === t.sel && t.robots.length > 1) {
+      const [cx, cy] = cc(r.position[0], r.position[1]);
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+      ctx.strokeRect(cx - s / 2 + 2, cy - s / 2 + 2, s - 4, s - 4);
+      ctx.setLineDash([]);
+    }
+    drawRobot(r.position[0], r.position[1], r.heading, r.colour);
+  });
+
+  // Inventory badges
+  t.robots.forEach((r, i) => {
+    const invItems = t.items.filter(it => it.position === 'inventory' && (it.robot || 0) === i);
+    if (invItems.length === 0) return;
+    const [rx, ry] = cc(r.position[0], r.position[1]);
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = '#333';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('[inv: ' + invItems.map(it => (it.count > 1 ? it.count + 'x' : '') + it.type).join(', ') + ']',
+                 rx, ry + s * 0.42 - 12);
+  });
+
+  // Text bar preview - shows where send_text() output appears in the live question
+  if (Array.isArray(t.world_params.expected_texts)) {
+    const barTop = MARGIN * 2 + gh * s + 2;
+    ctx.strokeStyle = '#999'; ctx.lineWidth = 0.5;
+    ctx.strokeRect(MARGIN, barTop, gw * s, TEXT_BAR_H - 4);
+    ctx.fillStyle = '#c9d6e3';
+    ctx.fillRect(MARGIN, barTop, Math.min(TEXT_LABEL_W, gw * s), TEXT_BAR_H - 4);
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Text:', MARGIN + Math.min(TEXT_LABEL_W, gw * s) / 2, barTop + (TEXT_BAR_H - 4) / 2);
+    ctx.fillStyle = '#888';
+    ctx.font = 'italic 11px sans-serif';
+    ctx.textAlign = 'left';
+    const texts = t.world_params.expected_texts || [];
+    const preview = texts.length ? `(shows last of ${texts.length} expected: "${texts[texts.length - 1]}")` : '(shows most recent send_text() output)';
+    ctx.fillText(preview, MARGIN + TEXT_LABEL_W + 8, barTop + (TEXT_BAR_H - 4) / 2);
+  }
+}
+
+function drawEmoji(emoji, cx, cy, size) {
+  ctx.font = `${Math.floor(size)}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(emoji, cx, cy + size * 0.05);
+}
+
+// Draw a named icon: a faint line-drawn house for house_outline, otherwise an emoji.
+function drawIconByName(name, cx, cy, size, fallback) {
+  if (name === OUTLINE_HOUSE) { drawHouseOutline(cx, cy, size * 2); return; }
+  drawEmoji(ITEM_EMOJI[name] || fallback, cx, cy, size);
+}
+
+// s is the cell size. Same proportions as World.draw_house_outline in the Python.
+function drawHouseOutline(cx, cy, s) {
+  const outline = [[-0.28,-0.30],[-0.28,0.08],[-0.36,0.08],[0,0.38],[0.36,0.08],[0.28,0.08],[0.28,-0.30],[-0.28,-0.30]];
+  const door = [[-0.07,-0.30],[-0.07,-0.08],[0.07,-0.08],[0.07,-0.30]];
+  ctx.strokeStyle = OUTLINE_COLOUR; ctx.lineWidth = 2; ctx.lineCap = 'butt';
+  for (const pts of [outline, door]) {
+    ctx.beginPath();
+    pts.forEach(([dx, dy], i) => { const x = cx + dx * s, y = cy - dy * s; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+  }
+}
+
+function drawRobot(gx, gy, heading, colour) {
+  const s = cs();
+  const [cx, cy] = cc(gx, gy);
+  const angleMap = { north: -Math.PI/2, east: 0, south: Math.PI/2, west: Math.PI };
+  const angle = angleMap[heading] || 0;
+  const r = s * 0.32;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+  ctx.fillStyle = colour || ROBOT_COLOR;
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.lineTo(-r, -r * 0.65);
+  ctx.lineTo(-r * 0.35, 0);
+  ctx.lineTo(-r, r * 0.65);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+function drawArrow([x1,y1], [x2,y2], color) {
+  const dx = x2-x1, dy = y2-y1;
+  const len = Math.sqrt(dx*dx+dy*dy);
+  if (len < 1) return;
+  const ux = dx/len, uy = dy/len;
+  const ar = 8;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x2 - ux*ar - uy*ar*0.5, y2 - uy*ar + ux*ar*0.5);
+  ctx.lineTo(x2, y2);
+  ctx.lineTo(x2 - ux*ar + uy*ar*0.5, y2 - uy*ar - ux*ar*0.5);
+  ctx.stroke();
+}
+
+// ─── Mouse interaction ────────────────────────────────────────────────────────
+
+function mousePos(e) {
+  const r = canvas.getBoundingClientRect();
+  return [e.clientX - r.left, e.clientY - r.top];
+}
+
+canvas.addEventListener('mousemove', e => {
+  const [mx, my] = mousePos(e);
+  hoverCell = c2cell(mx, my);
+  hoverEdge = (tool === 'wall' && wallLine === null) ? c2edge(mx, my) : null;
+
+  if (hoverCell) setStatus(`${toolHint()} | cell (${hoverCell[0]}, ${hoverCell[1]})`);
+
+  // Blocked drag
+  if (e.buttons === 1 && tool === 'blocked' && hoverCell && dragMode) {
+    const k = hoverCell.join(',');
+    dragMode === 'add' ? T().blocked.add(k) : T().blocked.delete(k);
+  }
+
+  // Wall drag: update end offset
+  if (wallLine !== null && e.buttons === 1) {
+    const [gw2, gh2] = T().grid_size;
+    if (wallLine.isHoriz) {
+      wallLineEnd = Math.max(0, Math.min(gw2 - 1, Math.floor((mx - MARGIN) / cs())));
+    } else {
+      wallLineEnd = Math.max(0, Math.min(gh2 - 1, Math.floor(gh2 - (my - MARGIN) / cs())));
+    }
+  }
+
+  // Path drag: extend path cell-by-cell as mouse moves over adjacent cells.
+  // Checked against lastCell (not startCell) on every move so the cell the
+  // drag started on gets included when it's already adjacent to the path end.
+  if (pathDragState !== null && e.buttons === 1 && hoverCell) {
+    const [lx, ly] = pathDragState.lastCell;
+    const [hx, hy] = hoverCell;
+    const dx = Math.abs(hx - lx), dy = Math.abs(hy - ly);
+    if ((dx === 1 && dy === 0) || (dx === 0 && dy === 1)) {
+      R().path.push([hx, hy]);
+      pathDragState.lastCell = [hx, hy];
+      pathDragState.pushed = true;
+      updatePathInfo();
+    }
+  }
+
+  render();
+});
+
+canvas.addEventListener('mouseleave', () => { hoverCell = null; hoverEdge = null; render(); });
+
+canvas.addEventListener('mousedown', e => {
+  const [mx, my] = mousePos(e);
+  const cell = c2cell(mx, my);
+  const t = T();
+
+  if (tool === 'blocked') {
+    if (!cell) return;
+    const k = cell.join(',');
+    if (t.blocked.has(k)) { t.blocked.delete(k); dragMode = 'del'; }
+    else { t.blocked.add(k); dragMode = 'add'; }
+    render();
+  }
+  else if (tool === 'wall') {
+    // Drag to draw a run of walls; a plain click is just a drag with no movement
+    const edge = c2edge(mx, my);
+    if (!edge) return;
+    e.preventDefault();
+    const [[x1,y1],[x2,y2]] = edge;
+    const isHoriz = y1 === y2;
+    const k = wKey(x1,y1,x2,y2);
+    wallLine = { isHoriz, gridLine: isHoriz ? y1 : x1, startOff: isHoriz ? x1 : y1, adding: !t.walls.has(k) };
+    wallLineEnd = wallLine.startOff;
+    render();
+  }
+  else if (tool === 'robot') {
+    if (!cell) return;
+    // Clicking another robot's start cell selects it; otherwise move the selected robot.
+    const hit = t.robots.findIndex(r => r.position[0] === cell[0] && r.position[1] === cell[1]);
+    if (hit >= 0 && hit !== t.sel) { t.sel = hit; refreshRobotsUI(); updatePathInfo(); render(); return; }
+    moveRobot(R(), cell);
+    refreshRobotsUI();
+    render();
+  }
+  else if (tool === 'target') {
+    if (!cell) return;
+    if (!hasTargets(t)) { setStatus('Targets only apply to TargetWorld and PickUpItemsWorld'); return; }
+    R().target = [...cell];
+    refreshRobotsUI();
+    render();
+  }
+  else if (tool === 'item') {
+    if (!cell) return;
+    placeItem(cell);
+    render();
+  }
+  else if (tool === 'path') {
+    if (!cell) return;
+    if (t.world_class !== 'PathWorld') { setStatus('Switch world class to PathWorld to use this tool'); return; }
+    const r = R();
+    if (r.path.length === 0) r.path = [[...r.position]];
+    const last = r.path[r.path.length - 1];
+    pathDragState = { startCell: [...cell], lastCell: [...last], pushed: false };
+    render();
+  }
+});
+
+canvas.addEventListener('mouseup', () => {
+  dragMode = null;
+
+  // Apply wall drag (a plain click is a drag with startOff === wallLineEnd)
+  if (wallLine !== null) {
+    const mn = Math.min(wallLine.startOff, wallLineEnd), mx2 = Math.max(wallLine.startOff, wallLineEnd);
+    for (let i = mn; i <= mx2; i++) {
+      const k = wallLine.isHoriz ? wKey(i, wallLine.gridLine, i+1, wallLine.gridLine)
+                                 : wKey(wallLine.gridLine, i, wallLine.gridLine, i+1);
+      wallLine.adding ? T().walls.add(k) : T().walls.delete(k);
+    }
+    wallLine = null;
+    render();
+  }
+
+  // Finalise path interaction
+  if (pathDragState !== null) {
+    if (!pathDragState.pushed) {
+      // Drag never extended the path — treat as a plain click (add adjacent cell or undo last)
+      handlePathClick(pathDragState.startCell);
+      render();
+    }
+    pathDragState = null;
+  }
+});
+
+function placeItem(cell) {
+  const t = T();
+  const type = document.getElementById('sel-item-type').value;
+  const count = Math.max(1, parseInt(document.getElementById('inp-item-count').value) || 1);
+  const inv = document.getElementById('chk-inventory').checked;
+  const pos = inv ? 'inventory' : [...cell];
+
+  // Toggle: if same type+position exists, remove it; else add
+  const idx = t.items.findIndex(it => {
+    if (inv) return it.position === 'inventory' && it.type === type && (it.robot || 0) === t.sel;
+    return Array.isArray(it.position) && it.position[0] === cell[0] && it.position[1] === cell[1] && it.type === type;
+  });
+  if (idx >= 0) t.items.splice(idx, 1);
+  else t.items.push(inv ? { type, position: pos, count, robot: t.sel } : { type, position: pos, count });
+  refreshItemsList();
+}
+
+function moveRobot(r, cell) {
+  r.position = [...cell];
+  if (T().world_class === 'PathWorld') {
+    if (r.path.length > 0) r.path[0] = [...cell];
+    else r.path = [[...cell]];
+    updatePathInfo();
+  }
+}
+
+function handlePathClick(cell) {
+  const t = T();
+  const r = R();
+  if (t.world_class !== 'PathWorld') { setStatus('Switch world class to PathWorld to use this tool'); return; }
+
+  if (r.path.length === 0) {
+    // Start from the robot's start cell
+    r.path = [[...r.position], [...cell]];
+    // If start === cell, just set [start]
+    if (cell[0] === r.position[0] && cell[1] === r.position[1]) {
+      r.path = [[...cell]];
+    }
+    updatePathInfo(); return;
+  }
+
+  const last = r.path[r.path.length - 1];
+  const dx = Math.abs(cell[0] - last[0]), dy = Math.abs(cell[1] - last[1]);
+
+  if (dx === 0 && dy === 0) {
+    // Clicked same cell: undo
+    r.path.pop();
+  } else if ((dx === 1 && dy === 0) || (dx === 0 && dy === 1)) {
+    r.path.push([...cell]);
+  } else {
+    setStatus(`Cell (${cell[0]},${cell[1]}) is not adjacent to path end (${last[0]},${last[1]})`);
+    return;
+  }
+  updatePathInfo();
+}
+
+function updatePathInfo() {
+  const r = R();
+  const n = r.path.length;
+  const who = ` for ${robotLabel(T(), T().sel)}`;
+  document.getElementById('path-info').textContent = n === 0 ? `0 cells${who}` : `${n} cells${who} (ends at ${r.path[n-1]})`;
+}
+
+function undoPath() { if (R().path.length > 0) { R().path.pop(); updatePathInfo(); render(); } }
+function clearPath() { R().path = []; updatePathInfo(); render(); }
+
+// ─── Sidebar controls ────────────────────────────────────────────────────────
+
+document.querySelectorAll('.tool-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    tool = btn.dataset.tool;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('item-ui').style.display = tool === 'item' ? 'block' : 'none';
+    document.getElementById('path-ui').style.display = tool === 'path' ? 'block' : 'none';
+    setStatus(toolHint());
+    hoverEdge = null; render();
+  });
+});
+
+function toolHint() {
+  return { blocked: 'Click/drag cells to toggle blocked (green)',
+           wall: 'Click or drag along a grid line to add/remove a run of walls',
+           robot: 'Click a cell to move the selected robot; click another robot to select it',
+           target: 'Click a cell to set the selected robot\'s target',
+           item: 'Click a cell to place/remove an item',
+           path: 'Click to add one cell; drag to extend continuously; click last cell to undo' }[tool] || '';
+}
+
+document.getElementById('inp-gw').addEventListener('change', e => { T().grid_size[0] = Math.max(1, parseInt(e.target.value)||10); render(); });
+document.getElementById('inp-gh').addEventListener('change', e => { T().grid_size[1] = Math.max(1, parseInt(e.target.value)||10); render(); });
+document.getElementById('inp-cs').addEventListener('change', render);
+
+document.getElementById('sel-world-class').addEventListener('change', e => {
+  const t = T();
+  // Text output and the icon/label settings are independent of world class - carry them across the switch.
+  const keep = {};
+  for (const k of ['expected_texts', 'target_icon', 'target_labels']) if (k in t.world_params) keep[k] = t.world_params[k];
+  t.world_class = e.target.value;
+  t.world_params = {};
+  if (t.world_class === 'TargetWorld' || t.world_class === 'PickUpItemsWorld') {
+    // Give robot 0 a default target (far corner) if nobody has one
+    if (!t.robots.some(r => r.target)) t.robots[0].target = [t.grid_size[0]-1, t.grid_size[1]-1];
+  }
+  if (t.world_class === 'PathWorld') {
+    t.robots.forEach(r => { if (r.path.length === 0) r.path = [[...r.position]]; });
+  }
+  Object.assign(t.world_params, keep);
+  updatePathInfo();
+  buildWorldParamsUI();
+  refreshRobotsUI();
+  render();
+});
+
+function buildWorldParamsUI() {
+  const t = T();
+  const div = document.getElementById('world-params-ui');
+  div.innerHTML = '';
+
+  if (hasTargets(t)) {
+    const icon = t.world_params.target_icon || 'flag';
+    div.insertAdjacentHTML('beforeend', `
+      <label style="margin-top:5px">Target icon <span style="color:#888;font-weight:normal">(set each robot's target cell in Robots below)</span></label>
+      <select id="tgt-icon">
+        <option value="flag" ${icon==='flag'?'selected':''}>🏁 flag</option>
+        <option value="target" ${icon==='target'?'selected':''}>🎯 target</option>
+        <option value="house" ${(icon==='house'||icon==='home')?'selected':''}>🏠 house/home</option>
+        <option value="house_outline" ${icon==='house_outline'?'selected':''}>⌂ house (faint outline)</option>
+      </select>
+      <label style="margin-top:4px"><input type="checkbox" id="chk-target-labels" ${labelTargets(t)?'checked':''}> Label targets with robot names <span style="color:#888">(several robots)</span></label>
+    `);
+    document.getElementById('tgt-icon').onchange = e => { t.world_params.target_icon = e.target.value; render(); };
+    document.getElementById('chk-target-labels').onchange = e => {
+      if (e.target.checked) delete t.world_params.target_labels; else t.world_params.target_labels = false;
+      render();
+    };
+  }
+
+  // Text output (send_text) - available for any world class, opt-in via checkbox.
+  {
+    const hasText = Array.isArray(t.world_params.expected_texts);
+    div.insertAdjacentHTML('beforeend', `
+      <label style="margin-top:8px"><input type="checkbox" id="chk-text-output" ${hasText?'checked':''}> Text output (send_text)</label>
+      <div id="text-output-fields" style="display:${hasText?'block':'none'}">
+        <label style="margin-top:2px">Expected texts <span style="color:#888;font-weight:normal">(send_text() calls, in order)</span></label>
+        <div id="expected-texts-list"></div>
+        <button class="small-btn" id="btn-add-text">+ Add text</button>
+      </div>
+    `);
+    document.getElementById('chk-text-output').onchange = e => {
+      if (e.target.checked) {
+        t.world_params.expected_texts = [];
+        document.getElementById('text-output-fields').style.display = 'block';
+        document.getElementById('btn-add-text').onclick = () => { t.world_params.expected_texts.push(''); refreshExpectedTextsList(); render(); };
+      } else {
+        delete t.world_params.expected_texts;
+        document.getElementById('text-output-fields').style.display = 'none';
+      }
+      render();
+    };
+    if (hasText) {
+      document.getElementById('btn-add-text').onclick = () => { t.world_params.expected_texts.push(''); refreshExpectedTextsList(); render(); };
+      refreshExpectedTextsList();
+    }
+  }
+
+  if (t.world_class === 'PickUpItemsWorld') {
+    if (!Array.isArray(t.world_params.item_dumps)) t.world_params.item_dumps = [];
+    div.insertAdjacentHTML('beforeend', `
+      <label style="margin-top:6px">Item dumps <span style="color:#888;font-weight:normal">(leave count blank to auto-count matching items)</span></label>
+      <div id="item-dumps-list"></div>
+      <button class="small-btn" id="btn-add-dump">+ Add dump</button>
+    `);
+    document.getElementById('btn-add-dump').onclick = () => {
+      t.world_params.item_dumps.push({ location: [0, 0], type: 'Any', icon: 'trash', count: null });
+      refreshItemDumpsList();
+      render();
+    };
+    refreshItemDumpsList();
+  }
+}
+
+function refreshItemDumpsList() {
+  const t = T();
+  const div = document.getElementById('item-dumps-list');
+  if (!div) return;
+  const dumps = t.world_params.item_dumps;
+  const iconOptions = Object.keys(ITEM_EMOJI).map(k => `<option value="${k}">${ITEM_EMOJI[k]} ${k}</option>`).join('');
+  const typeOptions = ['Any', ...Object.keys(ITEM_EMOJI)].map(k => `<option value="${k}">${k}</option>`).join('');
+  div.innerHTML = '';
+  dumps.forEach((dump, i) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.style.flexWrap = 'wrap';
+    row.style.borderBottom = '1px solid #eee';
+    row.style.paddingBottom = '4px';
+    row.innerHTML =
+      `<label>X <input type="number" class="dump-x" value="${dump.location[0]}" style="width:36px"></label>` +
+      `<label>Y <input type="number" class="dump-y" value="${dump.location[1]}" style="width:36px"></label>` +
+      `<label>Icon <select class="dump-icon">${iconOptions}</select></label>` +
+      `<label>Type <select class="dump-type">${typeOptions}</select></label>` +
+      `<label>Count <input type="number" class="dump-count" min="0" value="${dump.count === null || dump.count === undefined ? '' : dump.count}" placeholder="auto" style="width:44px"></label>` +
+      `<span class="del-item" title="Remove dump">✕</span>`;
+    row.querySelector('.dump-icon').value = dump.icon;
+    row.querySelector('.dump-type').value = dump.type;
+    row.querySelector('.dump-x').oninput = e => { dump.location[0] = parseInt(e.target.value) || 0; render(); };
+    row.querySelector('.dump-y').oninput = e => { dump.location[1] = parseInt(e.target.value) || 0; render(); };
+    row.querySelector('.dump-icon').onchange = e => { dump.icon = e.target.value; render(); };
+    row.querySelector('.dump-type').onchange = e => { dump.type = e.target.value; };
+    row.querySelector('.dump-count').oninput = e => {
+      dump.count = e.target.value === '' ? null : Math.max(0, parseInt(e.target.value) || 0);
+    };
+    row.querySelector('.del-item').onclick = () => { dumps.splice(i, 1); refreshItemDumpsList(); render(); };
+    div.appendChild(row);
+  });
+}
+
+function refreshExpectedTextsList() {
+  const t = T();
+  const div = document.getElementById('expected-texts-list');
+  if (!div) return;
+  const texts = t.world_params.expected_texts;
+  div.innerHTML = '';
+  texts.forEach((text, i) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `<span style="color:#888;width:14px">${i+1}.</span>`
+      + `<input type="text" value="${text.replace(/"/g,'&quot;')}" style="flex:1;font-size:11px;border:1px solid #ccc;border-radius:2px;padding:2px 4px">`
+      + `<span class="small-btn" data-act="up" title="Move up" style="padding:1px 5px">↑</span>`
+      + `<span class="small-btn" data-act="down" title="Move down" style="padding:1px 5px">↓</span>`
+      + `<span class="del-item" title="Remove">✕</span>`;
+    row.querySelector('input').oninput = e => { texts[i] = e.target.value; render(); };
+    row.querySelector('[data-act=up]').onclick = () => {
+      if (i > 0) { [texts[i-1], texts[i]] = [texts[i], texts[i-1]]; refreshExpectedTextsList(); render(); }
+    };
+    row.querySelector('[data-act=down]').onclick = () => {
+      if (i < texts.length - 1) { [texts[i+1], texts[i]] = [texts[i], texts[i+1]]; refreshExpectedTextsList(); render(); }
+    };
+    row.querySelector('.del-item').onclick = () => { texts.splice(i, 1); refreshExpectedTextsList(); render(); };
+    div.appendChild(row);
+  });
+}
+
+function refreshItemsList() {
+  const t = T();
+  const div = document.getElementById('items-list');
+  div.innerHTML = '';
+  t.items.forEach((item, i) => {
+    const pos = Array.isArray(item.position) ? `(${item.position[0]},${item.position[1]})`
+      : 'inv:' + robotLabel(t, item.robot || 0);
+    const emoji = ITEM_EMOJI[item.type] || '📦';
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `<span>${emoji}</span> <span>${item.type}</span> <span style="color:#888">@${pos}</span>`
+      + ` ×<input type="number" value="${item.count}" min="1" max="99" style="width:38px;font-size:11px;border:1px solid #ccc;border-radius:2px;padding:1px 2px">`
+      + ` <span class="del-item" title="Remove">✕</span>`;
+    row.querySelector('input').oninput = e => { item.count = parseInt(e.target.value)||1; render(); };
+    row.querySelector('.del-item').onclick = () => { t.items.splice(i, 1); refreshItemsList(); render(); };
+    div.appendChild(row);
+  });
+}
+
+function addInventoryItem() {
+  const type = document.getElementById('sel-item-type').value;
+  const count = Math.max(1, parseInt(document.getElementById('inp-item-count').value)||1);
+  T().items.push({ type, position: 'inventory', count, robot: T().sel });
+  refreshItemsList();
+  render();
+}
+
+// ─── Robots panel ────────────────────────────────────────────────────────────
+
+function refreshRobotsUI() {
+  const t = T();
+  const div = document.getElementById('robots-ui');
+  div.innerHTML = '';
+  t.robots.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'robot-row' + (i === t.sel ? ' sel' : '');
+    row.innerHTML = `<span class="swatch" style="background:${r.colour}"></span><span style="flex:1">${robotLabel(t, i)}</span>`
+      + (t.robots.length > 1 ? '<span class="del-item" title="Remove robot">✕</span>' : '');
+    row.onclick = () => { t.sel = i; refreshRobotsUI(); updatePathInfo(); render(); };
+    const del = row.querySelector('.del-item');
+    if (del) del.onclick = ev => { ev.stopPropagation(); removeRobot(i); };
+    div.appendChild(row);
+  });
+  const add = document.createElement('button');
+  add.className = 'small-btn'; add.textContent = '+ Add robot';
+  add.onclick = addRobot;
+  div.appendChild(add);
+
+  // Details of the selected robot
+  const r = R();
+  const detail = document.createElement('div');
+  detail.id = 'robot-detail';
+  const colourOpts = ROBOT_COLOURS.map(c => `<option value="${c}" ${c === r.colour ? 'selected' : ''}>${c}</option>`).join('');
+  detail.innerHTML = `
+    <label>Name <span style="color:#888;font-weight:normal">(students write RoboTurtle("name"))</span></label>
+    <input type="text" id="rb-name" value="${r.name.replace(/"/g, '&quot;')}">
+    <div class="row"><label>Colour <select id="rb-colour" style="width:90px">${colourOpts}</select></label></div>
+    <div class="row">
+      <label>Start X <input type="number" id="rb-x" min="0" value="${r.position[0]}"></label>
+      <label>Y <input type="number" id="rb-y" min="0" value="${r.position[1]}"></label>
+    </div>
+    <div class="heading-grid">
+      <div class="heading-btn spacer"></div><button class="heading-btn" data-h="north">N ↑</button><div class="heading-btn spacer"></div>
+      <button class="heading-btn" data-h="west">← W</button><div class="heading-btn spacer"></div><button class="heading-btn" data-h="east">E →</button>
+      <div class="heading-btn spacer"></div><button class="heading-btn" data-h="south">↓ S</button><div class="heading-btn spacer"></div>
+    </div>
+    <div id="rb-target-ui"></div>`;
+  div.appendChild(detail);
+
+  detail.querySelector('#rb-name').oninput = e => { r.name = e.target.value.trim(); refreshRobotRowsOnly(); refreshItemsList(); updatePathInfo(); render(); };
+  detail.querySelector('#rb-colour').onchange = e => { r.colour = e.target.value; refreshRobotRowsOnly(); render(); };
+  detail.querySelector('#rb-x').oninput = e => { moveRobot(r, [Math.max(0, parseInt(e.target.value) || 0), r.position[1]]); render(); };
+  detail.querySelector('#rb-y').oninput = e => { moveRobot(r, [r.position[0], Math.max(0, parseInt(e.target.value) || 0)]); render(); };
+  detail.querySelectorAll('.heading-btn[data-h]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.h === r.heading);
+    btn.onclick = () => {
+      r.heading = btn.dataset.h;
+      detail.querySelectorAll('.heading-btn[data-h]').forEach(b => b.classList.toggle('active', b.dataset.h === r.heading));
+      render();
+    };
+  });
+
+  // Target (TargetWorld / PickUpItemsWorld only)
+  const tdiv = detail.querySelector('#rb-target-ui');
+  if (hasTargets(t)) {
+    const has = !!r.target;
+    tdiv.innerHTML = `
+      <label style="margin-top:4px"><input type="checkbox" id="rb-has-target" ${has ? 'checked' : ''}> Has a target cell</label>
+      <div class="row" style="display:${has ? 'flex' : 'none'}" id="rb-target-xy">
+        <label>X <input type="number" id="rb-tx" min="0" value="${has ? r.target[0] : 0}"></label>
+        <label>Y <input type="number" id="rb-ty" min="0" value="${has ? r.target[1] : 0}"></label>
+      </div>`;
+    tdiv.querySelector('#rb-has-target').onchange = e => {
+      r.target = e.target.checked ? [t.grid_size[0] - 1, t.grid_size[1] - 1] : null;
+      refreshRobotsUI(); render();
+    };
+    if (has) {
+      tdiv.querySelector('#rb-tx').oninput = e => { r.target[0] = Math.max(0, parseInt(e.target.value) || 0); render(); };
+      tdiv.querySelector('#rb-ty').oninput = e => { r.target[1] = Math.max(0, parseInt(e.target.value) || 0); render(); };
+    }
+  }
+}
+
+// Update just the robot list rows (so typing in the name box doesn't lose focus).
+function refreshRobotRowsOnly() {
+  const t = T();
+  document.querySelectorAll('#robots-ui .robot-row').forEach((row, i) => {
+    row.querySelector('.swatch').style.background = t.robots[i].colour;
+    row.querySelector('span:nth-child(2)').textContent = robotLabel(t, i);
+  });
+}
+
+function addRobot() {
+  const t = T();
+  if (t.robots.length >= ROBOT_COLOURS.length) { setStatus('That is enough robots!'); return; }
+  const r = newRobot(t.robots.length);
+  // First free cell along the bottom row
+  let x = 0;
+  while (t.robots.some(o => o.position[0] === x && o.position[1] === 0) && x < t.grid_size[0] - 1) x++;
+  r.position = [x, 0];
+  t.robots.push(r);
+  if (t.world_class === 'PathWorld') r.path = [[...r.position]];
+  t.sel = t.robots.length - 1;
+  refreshRobotsUI(); refreshItemsList(); updatePathInfo(); render();
+}
+
+function removeRobot(i) {
+  const t = T();
+  if (t.robots.length <= 1) return;
+  t.robots.splice(i, 1);
+  // Drop that robot's inventory items and renumber the rest
+  t.items = t.items.filter(it => !(it.position === 'inventory' && (it.robot || 0) === i));
+  t.items.forEach(it => { if (it.position === 'inventory' && (it.robot || 0) > i) it.robot -= 1; });
+  t.sel = Math.min(t.sel > i ? t.sel - 1 : t.sel, t.robots.length - 1);
+  refreshRobotsUI(); refreshItemsList(); updatePathInfo(); render();
+}
+
+// ─── Tab management ───────────────────────────────────────────────────────────
+
+function rebuildTabs() {
+  document.querySelectorAll('.tab').forEach(t => t.remove());
+  const bar = document.getElementById('tab-bar');
+  const first = document.getElementById('btn-add-tab');
+  tests.forEach((_, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab' + (i===cur?' active':'');
+    btn.textContent = `Test ${i+1}`;
+    btn.onclick = () => { cur = i; loadUI(); rebuildTabs(); render(); };
+    bar.insertBefore(btn, first);
+  });
+}
+
+document.getElementById('btn-add-tab').onclick = () => {
+  tests.push(newTC()); cur = tests.length-1; loadUI(); rebuildTabs(); render();
+};
+document.getElementById('btn-dup-tab').onclick = () => {
+  tests.splice(cur+1, 0, deepCopy(T())); cur++; loadUI(); rebuildTabs(); render();
+};
+document.getElementById('btn-del-tab').onclick = () => {
+  if (tests.length <= 1) { setStatus('Cannot delete the only test case'); return; }
+  if (!confirm(`Delete Test ${cur+1}? This cannot be undone.`)) return;
+  tests.splice(cur, 1); cur = Math.min(cur, tests.length-1); loadUI(); rebuildTabs(); render();
+};
+
+function deepCopy(t) {
+  return {
+    grid_size: [...t.grid_size], cell_size: t.cell_size,
+    world_class: t.world_class,
+    world_params: JSON.parse(JSON.stringify(t.world_params)),
+    robots: JSON.parse(JSON.stringify(t.robots)),
+    sel: t.sel,
+    walls: new Set(t.walls), blocked: new Set(t.blocked),
+    items: t.items.map(it => ({...it, position: Array.isArray(it.position)?[...it.position]:it.position}))
+  };
+}
+
+function loadUI() {
+  const t = T();
+  document.getElementById('inp-gw').value = t.grid_size[0];
+  document.getElementById('inp-gh').value = t.grid_size[1];
+  document.getElementById('inp-cs').value = t.cell_size || 0;
+  document.getElementById('sel-world-class').value = t.world_class;
+  buildWorldParamsUI();
+  refreshRobotsUI();
+  updatePathInfo();
+  refreshItemsList();
+}
+
+// ─── Export / Import ─────────────────────────────────────────────────────────
+
+function exportTC(t) {
+  const wp = {...t.world_params};
+  if (t.cell_size > 0) wp.cell_size = t.cell_size;
+  const obj = { grid_size: t.grid_size, world_class: t.world_class, world_params: wp };
+
+  const names = t.robots.map((r, i) => robotLabel(t, i));
+  if (hasTargets(t)) {
+    const targets = [];
+    t.robots.forEach((r, i) => { if (r.target) targets.push({ robot: names[i], location: [...r.target] }); });
+    if (targets.length) wp.targets = targets;
+  }
+  if (t.world_class === 'PathWorld') {
+    const paths = [];
+    t.robots.forEach((r, i) => { if (r.path.length > 1) paths.push({ robot: names[i], path: pathToSegs(r.path) }); });
+    wp.paths = paths;
+  }
+  obj.robots = t.robots.map((r, i) => ({ name: names[i], position: [...r.position], heading: r.heading, colour: r.colour }));
+
+  const bc = exportBlocked(t);
+  if (bc.length) obj.blocked_cells = bc;
+
+  const wl = exportWalls(t);
+  if (wl.length) obj.walls = wl;
+
+  if (t.items.length) {
+    obj.items = t.items.map(it => {
+      const o = { ...it };
+      if (it.position !== 'inventory') delete o.robot;
+      return o;
+    });
+  }
+  return obj;
+}
+
+// Things that will probably go wrong in the live question; shown as warnings after export.
+function validateTC(t, n) {
+  const w = [];
+  const label = `Test ${n}`;
+  const names = t.robots.map((r, i) => robotLabel(t, i));
+  if (new Set(names).size !== names.length) w.push(`${label}: robot names must be unique`);
+  const starts = t.robots.map(r => r.position.join(','));
+  if (new Set(starts).size !== starts.length) w.push(`${label}: two robots start in the same cell`);
+  if (t.world_class === 'TargetWorld' && !t.robots.some(r => r.target)) w.push(`${label}: TargetWorld needs at least one target`);
+  if (t.world_class === 'PathWorld') {
+    t.robots.forEach((r, i) => { if (r.path.length < 2) w.push(`${label}: ${names[i]} has no path (so won't be graded)`); });
+  }
+  return w;
+}
+
+function pathToSegs(path) {
+  if (path.length < 2) return [];
+  const segs = [];
+  let segStart = path[0];
+  for (let i = 1; i < path.length; i++) {
+    const atEnd = (i === path.length - 1);
+    const dirChanged = i > 1 && dir(path[i-2], path[i-1]) !== dir(path[i-1], path[i]);
+    if (dirChanged) { segs.push([segStart, path[i-1]]); segStart = path[i-1]; }
+    if (atEnd) segs.push([segStart, path[i]]);
+  }
+  return segs;
+}
+
+function dir([x1,y1], [x2,y2]) {
+  if (x2 > x1) return 'E'; if (x2 < x1) return 'W';
+  if (y2 > y1) return 'N'; return 'S';
+}
+
+function exportBlocked(t) {
+  // Group cells by row, merge consecutive x-runs into rectangle spans [[x0,y],[x1,y]]
+  const byRow = new Map();
+  for (const k of t.blocked) {
+    const [x, y] = k.split(',').map(Number);
+    if (!byRow.has(y)) byRow.set(y, []);
+    byRow.get(y).push(x);
+  }
+  const out = [];
+  for (const [y, xs] of byRow) {
+    xs.sort((a, b) => a - b);
+    let s = xs[0], p = xs[0];
+    for (let i = 1; i < xs.length; i++) {
+      if (xs[i] === p + 1) { p = xs[i]; }
+      else { out.push([[s, y], [p, y]]); s = xs[i]; p = xs[i]; }
+    }
+    out.push([[s, y], [p, y]]);
+  }
+  return out;
+}
+
+function exportWalls(t) {
+  const [gw, gh] = t.grid_size;
+  const hmap = new Map(), vmap = new Map();
+  for (const k of t.walls) {
+    const [[x1,y1],[x2,y2]] = wParse(k);
+    // Skip perimeter walls – Python adds them automatically
+    if (y1 === y2 && (y1 === 0 || y1 === gh)) continue;
+    if (x1 === x2 && (x1 === 0 || x1 === gw)) continue;
+    if (y1 === y2) { if (!hmap.has(y1)) hmap.set(y1,[]); hmap.get(y1).push(x1); }
+    else           { if (!vmap.has(x1)) vmap.set(x1,[]); vmap.get(x1).push(y1); }
+  }
+  const out = [];
+  function mergeRuns(vals, fixedA, isHoriz) {
+    vals.sort((a,b)=>a-b);
+    let s=vals[0], p=vals[0];
+    for (let i=1;i<vals.length;i++) {
+      if (vals[i]===p+1) { p=vals[i]; }
+      else { out.push(isHoriz ? [[s,fixedA],[p+1,fixedA]] : [[fixedA,s],[fixedA,p+1]]); s=vals[i]; p=vals[i]; }
+    }
+    out.push(isHoriz ? [[s,fixedA],[p+1,fixedA]] : [[fixedA,s],[fixedA,p+1]]);
+  }
+  for (const [y,xs] of hmap) mergeRuns(xs, y, true);
+  for (const [x,ys] of vmap) mergeRuns(ys, x, false);
+  return out;
+}
+
+// Like JSON.stringify(val, null, 2) but anything that fits within 100 characters stays on one line.
+function smartJSON(val, indent) {
+  indent = indent || 0;
+  const step = 2;
+  const flat = JSON.stringify(val);
+  if (val === null || typeof val !== 'object' || indent + flat.length <= 100) return flat;
+  const pad = ' '.repeat(indent + step);
+  const close = ' '.repeat(indent);
+  if (Array.isArray(val)) {
+    return '[\n' + val.map(v => pad + smartJSON(v, indent + step)).join(',\n') + '\n' + close + ']';
+  }
+  const entries = Object.entries(val)
+    .map(([k, v]) => pad + JSON.stringify(k) + ': ' + smartJSON(v, indent + step));
+  return '{\n' + entries.join(',\n') + '\n' + close + '}';
+}
+
+function buildOutput() {
+  return smartJSON({ testcases: tests.map(exportTC) });
+}
+
+function warnings() {
+  return tests.flatMap((t, i) => validateTC(t, i + 1));
+}
+
+function exportStatus(msg) {
+  const w = warnings();
+  setStatus(msg + (w.length ? '  ⚠ ' + w.join('; ') : ''));
+}
+
+document.getElementById('btn-export').onclick = () => {
+  document.getElementById('json-area').value = buildOutput();
+  exportStatus('JSON exported — paste into Moodle template parameters field as the value of "testcases"');
+};
+
+document.getElementById('btn-copy').onclick = () => {
+  const text = buildOutput();
+  document.getElementById('json-area').value = text;
+  navigator.clipboard ? navigator.clipboard.writeText(text).then(() => exportStatus('Copied to clipboard'))
+                      : (document.getElementById('json-area').select(), document.execCommand('copy'), setStatus('Copied'));
+};
+
+document.getElementById('btn-import').onclick = () => {
+  const raw = document.getElementById('json-area').value.trim();
+  if (!raw) { setStatus('Paste JSON into the text area first'); return; }
+  try {
+    const data = JSON.parse(raw);
+    const arr = data.testcases ? data.testcases : (Array.isArray(data) ? data : [data]);
+    tests = arr.map(importTC);
+    cur = 0; loadUI(); rebuildTabs(); render();
+    setStatus(`Imported ${tests.length} test case(s)`);
+  } catch(err) {
+    setStatus('Import error: ' + err.message);
+  }
+};
+
+function importTC(data) {
+  const t = newTC();
+  t.grid_size = data.grid_size || [10,10];
+  t.world_class = data.world_class || 'TargetWorld';
+  t.world_params = JSON.parse(JSON.stringify(data.world_params || {}));
+  t.cell_size = t.world_params.cell_size || 0;
+  delete t.world_params.cell_size;  // store separately, re-add on export
+
+  // Robots: the "robots" list, or a legacy single-robot "robot_start" (which is given a default name).
+  const starts = Array.isArray(data.robots) ? data.robots
+               : [data.robot_start || { position: [0, 0], heading: 'north' }];
+  t.robots = starts.map((st, i) => {
+    const r = newRobot(i);
+    r.name = (Array.isArray(data.robots) && st.name) ? st.name : DEFAULT_NAMES[i % DEFAULT_NAMES.length];
+    r.position = [...st.position];
+    r.heading = st.heading || 'north';
+    if (st.colour) r.colour = st.colour;
+    return r;
+  });
+  t.sel = 0;
+  const robotIndex = (entry, i) => {       // plain entries match by position in the list, dict entries by name
+    if (!Array.isArray(entry) && entry && typeof entry === 'object' && 'robot' in entry) {
+      return t.robots.findIndex(r => r.name === entry.robot);
+    }
+    return i;
+  };
+
+  // Targets: "targets" list (cells or {robot, location}) or the single "target" (robot 0's).
+  const wp = t.world_params;
+  const rawTargets = Array.isArray(wp.targets) ? wp.targets : (wp.target ? [wp.target] : []);
+  rawTargets.forEach((entry, i) => {
+    const idx = robotIndex(entry, i);
+    if (idx >= 0 && idx < t.robots.length) t.robots[idx].target = [...(Array.isArray(entry) ? entry : entry.location)];
+  });
+  delete wp.target; delete wp.targets;
+  if (t.world_class === 'TargetWorld' || t.world_class === 'PickUpItemsWorld') {
+    // nothing else to do - robots without a target simply have none
+  } else {
+    t.robots.forEach(r => { r.target = null; });
+  }
+
+  // Paths (PathWorld): "paths" list (segment lists or {robot, path}) or "path" (robot 0's).
+  if (t.world_class === 'PathWorld') {
+    const rawPaths = Array.isArray(wp.paths) ? wp.paths : (Array.isArray(wp.path) ? [wp.path] : []);
+    rawPaths.forEach((entry, i) => {
+      const idx = robotIndex(entry, i);
+      const segs = (!Array.isArray(entry) && entry && entry.path) ? entry.path : entry;
+      if (idx >= 0 && idx < t.robots.length) t.robots[idx].path = expandSegs(segs);
+    });
+  }
+  delete wp.path; delete wp.paths;
+
+  // Legacy single item_dump -> item_dumps list. Never surfaced in the UI as
+  // item_dump - Python still accepts it for compatibility, but the editor
+  // always normalises to the current format on import.
+  if (!Array.isArray(t.world_params.item_dumps) && t.world_params.item_dump) {
+    const legacy = t.world_params.item_dump;
+    t.world_params.item_dumps = [{
+      location: [...legacy.location],
+      type: 'Any',
+      icon: 'trash',
+      count: (typeof legacy.num_items === 'number') ? legacy.num_items : null,
+    }];
+  }
+  delete t.world_params.item_dump;
+
+  // Walls: expand multi-cell segments to unit segments (skip perimeter – always drawn separately)
+  t.walls = new Set();
+  const [gw_i, gh_i] = t.grid_size;
+  for (const [[x1,y1],[x2,y2]] of (data.walls||[])) {
+    if (x1===x2) { const mn=Math.min(y1,y2),mx=Math.max(y1,y2); for(let y=mn;y<mx;y++) {
+      if (x1>0 && x1<gw_i) t.walls.add(wKey(x1,y,x1,y+1));
+    }}
+    else { const mn=Math.min(x1,x2),mx=Math.max(x1,x2); for(let x=mn;x<mx;x++) {
+      if (y1>0 && y1<gh_i) t.walls.add(wKey(x,y1,x+1,y1));
+    }}
+  }
+
+  // Blocked cells: expand rectangles
+  t.blocked = new Set();
+  for (const [[x0,y0],[x1,y1]] of (data.blocked_cells||[])) {
+    for (let x=Math.min(x0,x1);x<=Math.max(x0,x1);x++)
+      for (let y=Math.min(y0,y1);y<=Math.max(y0,y1);y++)
+        t.blocked.add(`${x},${y}`);
+  }
+
+  t.items = JSON.parse(JSON.stringify(data.items||[]));
+  t.items.forEach(it => { if (it.position === 'inventory' && it.robot === undefined) it.robot = 0; });
+
+  return t;
+}
+
+function expandSegs(segs) {
+  const cells = [];
+  for (const [[x0,y0],[x1,y1]] of segs) {
+    const dx=Math.sign(x1-x0), dy=Math.sign(y1-y0);
+    let x=x0, y=y0;
+    if (!cells.length || cells[cells.length-1][0]!==x || cells[cells.length-1][1]!==y) cells.push([x,y]);
+    while (x!==x1||y!==y1) { x+=dx; y+=dy; cells.push([x,y]); }
+  }
+  return cells;
+}
+
+// ─── Bottom panel resizer ─────────────────────────────────────────────────────
+
+(function () {
+  const resizer = document.getElementById('resizer');
+  const jsonPanel = document.getElementById('json-panel');
+  resizer.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = jsonPanel.getBoundingClientRect().height;
+    resizer.classList.add('active');
+    function onMove(e2) {
+      const newHeight = Math.max(60, Math.min(window.innerHeight - 200, startHeight + (startY - e2.clientY)));
+      jsonPanel.style.height = newHeight + 'px';
+    }
+    function onUp() {
+      resizer.classList.remove('active');
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+})();
+
+// ─── Status bar ──────────────────────────────────────────────────────────────
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+
+loadUI();
+rebuildTabs();
+render();
+setStatus(toolHint());
+</script>
+</body>
+</html>

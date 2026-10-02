@@ -1,0 +1,44 @@
+<div class="crui-survey">
+  <style>
+    .crui-survey { font-family: sans-serif; max-width: 640px; }
+    .crui-survey fieldset { border: 1px solid #ccc; border-radius: 6px; margin-bottom: 12px; padding: 10px 14px; }
+    .crui-survey legend { font-weight: bold; padding: 0 6px; }
+    .crui-survey label.crui-opt { display: inline-block; margin-right: 18px; font-weight: normal; }
+    .crui-survey textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 1em; }
+  </style>
+
+  <fieldset>
+    <legend>1. Did you try out the new AI-feedback feature?</legend>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-tried" value="Yes"> Yes</label>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-tried" value="No"> No</label>
+    <p><em>If you answered No, you can skip the rest of this survey.</em></p>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. Did you find any of the AI feedback useful?</legend>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-useful" value="Yes, definitely"> Yes, definitely</label>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-useful" value="Somewhat"> Somewhat</label>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-useful" value="Not really"> Not really</label>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-useful" value="N/A"> N/A</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. Did you think the AI gave you any wrong advice?</legend>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-wrongadvice" value="Yes"> Yes</label>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-wrongadvice" value="No"> No</label>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-wrongadvice" value="Not sure"> Not sure</label>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-wrongadvice" value="N/A"> N/A</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>4. Would you like this functionality available on all programming questions?</legend>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-allquestions" value="Yes"> Yes</label>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-allquestions" value="No"> No</label>
+    <label class="crui-opt"><input type="radio" class="coderunner-ui-element" name="crui-allquestions" value="Maybe, with some changes"> Maybe, with some changes</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>5. Any further comments?</legend>
+    <textarea class="coderunner-ui-element" name="crui-comments" rows="5" placeholder="Type any further comments here..."></textarea>
+  </fieldset>
+</div>

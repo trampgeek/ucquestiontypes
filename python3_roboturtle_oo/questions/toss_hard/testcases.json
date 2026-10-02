@@ -1,0 +1,64 @@
+{
+  "testcases": [
+    {
+      "world_class": "PickUpItemsWorld",
+      "world_params": {"item_dumps": [{"location": [7, 3], "icon": "box"}]},
+      "grid_size": [8, 5],
+      "robots": [
+        {"name": "Alice", "position": [0, 0], "heading": "east", "colour": "blue"},
+        {"name": "Bob", "position": [7, 2], "heading": "west", "colour": "red"}
+      ],
+      "walls": [[[4, 0], [4, 5]]],
+      "items": [
+        {"type": "star", "position": [1, 0], "count": 1},
+        {"type": "star", "position": [2, 0], "count": 1},
+        {"type": "star", "position": [3, 0], "count": 1}
+      ]
+    },
+    {
+      "world_class": "PickUpItemsWorld",
+      "world_params": {"item_dumps": [{"location": [9, 4], "icon": "trash"}]},
+      "grid_size": [10, 6],
+      "robots": [
+        {"name": "Alice", "position": [0, 0], "heading": "east", "colour": "blue"},
+        {"name": "Bob", "position": [9, 3], "heading": "west", "colour": "red"}
+      ],
+      "walls": [[[6, 0], [6, 6]]],
+      "items": [
+        {"type": "key", "position": [0, 0], "count": 1},
+        {"type": "leaf", "position": [1, 0], "count": 2},
+        {"type": "leaf", "position": [3, 0], "count": 1},
+        {"type": "leaf", "position": [5, 0], "count": 1}
+      ]
+    },
+    {
+      "world_class": "PickUpItemsWorld",
+      "world_params": {"item_dumps": [{"location": [6, 2], "icon": "box"}]},
+      "grid_size": [7, 4],
+      "robots": [
+        {"name": "Alice", "position": [0, 0], "heading": "east", "colour": "blue"},
+        {"name": "Bob", "position": [6, 1], "heading": "west", "colour": "red"}
+      ],
+      "walls": [[[3, 0], [3, 4]]],
+      "items": [
+        {"type": "key", "position": [1, 0], "count": 1},
+        {"type": "key", "position": [2, 0], "count": 2}
+      ]
+    },
+    {
+      "world_class": "PickUpItemsWorld",
+      "world_params": {"item_dumps": [{"location": [8, 5], "icon": "box"}]},
+      "grid_size": [9, 6],
+      "robots": [
+        {"name": "Alice", "position": [0, 0], "heading": "east", "colour": "blue"},
+        {"name": "Bob", "position": [8, 4], "heading": "west", "colour": "red"}
+      ],
+      "walls": [[[5, 0], [5, 6]]],
+      "items": [
+        {"type": "star", "position": [2, 0], "count": 2},
+        {"type": "leaf", "position": [3, 0], "count": 1},
+        {"type": "star", "position": [4, 0], "count": 1}
+      ]
+    }
+  ]
+}

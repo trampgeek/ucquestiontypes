@@ -1,0 +1,408 @@
+{
+  "testcases": [
+    {
+      "world_class": "PickUpItemsWorld",
+      "world_params": {
+        "targets": [
+          {
+            "robot": "Alice",
+            "location": [
+              0,
+              0
+            ]
+          },
+          {
+            "robot": "Bob",
+            "location": [
+              7,
+              0
+            ]
+          }
+        ],
+        "target_icon": "house_outline",
+        "target_labels": false,
+        "item_dumps": [
+          {
+            "location": [
+              7,
+              1
+            ],
+            "icon": "trash"
+          }
+        ]
+      },
+      "grid_size": [
+        8,
+        2
+      ],
+      "robots": [
+        {
+          "name": "Alice",
+          "position": [
+            0,
+            0
+          ],
+          "heading": "east",
+          "colour": "blue"
+        },
+        {
+          "name": "Bob",
+          "position": [
+            7,
+            0
+          ],
+          "heading": "west",
+          "colour": "red"
+        }
+      ],
+      "walls": [
+        [
+          [
+            4,
+            0
+          ],
+          [
+            4,
+            1
+          ]
+        ],
+        [
+          [
+            7,
+            1
+          ],
+          [
+            8,
+            1
+          ]
+        ]
+      ],
+      "blocked_cells": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            6,
+            1
+          ]
+        ]
+      ],
+      "items": [
+        {
+          "type": "star",
+          "position": "inventory",
+          "count": 3,
+          "robot": 0
+        }
+      ]
+    },
+    {
+      "world_class": "PickUpItemsWorld",
+      "world_params": {
+        "targets": [
+          {
+            "robot": "Alice",
+            "location": [
+              0,
+              0
+            ]
+          },
+          {
+            "robot": "Bob",
+            "location": [
+              9,
+              0
+            ]
+          }
+        ],
+        "target_icon": "house_outline",
+        "target_labels": false,
+        "item_dumps": [
+          {
+            "location": [
+              9,
+              1
+            ],
+            "icon": "trash"
+          }
+        ]
+      },
+      "grid_size": [
+        10,
+        2
+      ],
+      "robots": [
+        {
+          "name": "Alice",
+          "position": [
+            0,
+            0
+          ],
+          "heading": "east",
+          "colour": "blue"
+        },
+        {
+          "name": "Bob",
+          "position": [
+            9,
+            0
+          ],
+          "heading": "west",
+          "colour": "red"
+        }
+      ],
+      "walls": [
+        [
+          [
+            6,
+            0
+          ],
+          [
+            6,
+            1
+          ]
+        ],
+        [
+          [
+            9,
+            1
+          ],
+          [
+            10,
+            1
+          ]
+        ]
+      ],
+      "blocked_cells": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            8,
+            1
+          ]
+        ]
+      ],
+      "items": [
+        {
+          "type": "key",
+          "position": "inventory",
+          "count": 1,
+          "robot": 0
+        },
+        {
+          "type": "leaf",
+          "position": "inventory",
+          "count": 3,
+          "robot": 0
+        }
+      ]
+    },
+    {
+      "world_class": "PickUpItemsWorld",
+      "world_params": {
+        "targets": [
+          {
+            "robot": "Alice",
+            "location": [
+              0,
+              0
+            ]
+          },
+          {
+            "robot": "Bob",
+            "location": [
+              6,
+              0
+            ]
+          }
+        ],
+        "target_icon": "house_outline",
+        "target_labels": false,
+        "item_dumps": [
+          {
+            "location": [
+              6,
+              1
+            ],
+            "icon": "trash"
+          }
+        ]
+      },
+      "grid_size": [
+        7,
+        2
+      ],
+      "robots": [
+        {
+          "name": "Alice",
+          "position": [
+            0,
+            0
+          ],
+          "heading": "east",
+          "colour": "blue"
+        },
+        {
+          "name": "Bob",
+          "position": [
+            6,
+            0
+          ],
+          "heading": "west",
+          "colour": "red"
+        }
+      ],
+      "walls": [
+        [
+          [
+            3,
+            0
+          ],
+          [
+            3,
+            1
+          ]
+        ],
+        [
+          [
+            6,
+            1
+          ],
+          [
+            7,
+            1
+          ]
+        ]
+      ],
+      "blocked_cells": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            5,
+            1
+          ]
+        ]
+      ],
+      "items": [
+        {
+          "type": "key",
+          "position": "inventory",
+          "count": 3,
+          "robot": 0
+        }
+      ]
+    },
+    {
+      "world_class": "PickUpItemsWorld",
+      "world_params": {
+        "targets": [
+          {
+            "robot": "Alice",
+            "location": [
+              0,
+              0
+            ]
+          },
+          {
+            "robot": "Bob",
+            "location": [
+              8,
+              0
+            ]
+          }
+        ],
+        "target_icon": "house_outline",
+        "target_labels": false,
+        "item_dumps": [
+          {
+            "location": [
+              8,
+              1
+            ],
+            "icon": "trash"
+          }
+        ]
+      },
+      "grid_size": [
+        9,
+        2
+      ],
+      "robots": [
+        {
+          "name": "Alice",
+          "position": [
+            0,
+            0
+          ],
+          "heading": "east",
+          "colour": "blue"
+        },
+        {
+          "name": "Bob",
+          "position": [
+            8,
+            0
+          ],
+          "heading": "west",
+          "colour": "red"
+        }
+      ],
+      "walls": [
+        [
+          [
+            5,
+            0
+          ],
+          [
+            5,
+            1
+          ]
+        ],
+        [
+          [
+            8,
+            1
+          ],
+          [
+            9,
+            1
+          ]
+        ]
+      ],
+      "blocked_cells": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            7,
+            1
+          ]
+        ]
+      ],
+      "items": [
+        {
+          "type": "star",
+          "position": "inventory",
+          "count": 2,
+          "robot": 0
+        },
+        {
+          "type": "leaf",
+          "position": "inventory",
+          "count": 1,
+          "robot": 0
+        }
+      ]
+    }
+  ]
+}
